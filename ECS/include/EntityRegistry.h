@@ -204,7 +204,7 @@ namespace ECS
 		/// <param name="entity">: ID of the entity that we want to modify</param>
 		/// <returns>a boolean that's true if the component has been found, false otherwise</returns>
 		template<ComponentConstraint Comp>
-		inline bool HasComponent(EntityID entity)
+		[[nodiscard]] inline bool HasComponent(EntityID entity)
 		{
 		#ifdef _DEBUG
 			if (!m_ComponentsLists.contains(ComponentType<Comp>()))
@@ -222,13 +222,13 @@ namespace ECS
 		/// <param name="entity">: ID of the entity that we want to modify</param>
 		/// <returns>a boolean that's true if the components have been found, false otherwise</returns>
 		template<ComponentConstraint... Comps>
-		inline bool HasComponents(EntityID entity)
+		[[nodiscard]] inline bool HasComponents(EntityID entity)
 		{
 			return (HasComponent<Comps>(entity) && ...);
 		}
 
 		template<ComponentConstraint Comp>
-		inline Comp& GetComponent(EntityID entity)
+		[[nodiscard]] inline Comp& GetComponent(EntityID entity)
 		{
 		#ifdef _DEBUG
 			if (!m_ComponentsLists.contains(ComponentType<Comp>()))
@@ -240,13 +240,13 @@ namespace ECS
 		}
 
 		template<ComponentConstraint... Comps>
-		inline std::tuple<Comps&...> GetComponents(EntityID entity)
+		[[nodiscard]] inline std::tuple<Comps&...> GetComponents(EntityID entity)
 		{
 			return { GetComponent<Comps>(entity)... };
 		}
 
 		template<ComponentConstraint Comp>
-		const std::shared_ptr<const ComponentList<Comp>>& View() const
+		[[nodiscard]] const std::shared_ptr<const ComponentList<Comp>>& View() const
 		{
 		#ifdef _DEBUG
 			if (!m_ComponentsLists.contains(ComponentType<Comp>()))
@@ -267,8 +267,8 @@ namespace ECS
 
 		enum class EntityEventType
 		{
-			Created,
-			Deleted,
+			EntityCreated,
+			EntityDeleted,
 			ComponentAdded,
 			ComponentRemoved
 		};

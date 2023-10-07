@@ -201,7 +201,7 @@ namespace ECS
 		/// </summary>
 		/// <param name="entity">: ID of the entity that we want to modify</param>
 		/// <returns>a boolean that's true if there is a component, false otherwise</returns>
-		inline bool HasComponent(EntityID entity) { return m_ComponentMap.contains(entity); }
+		[[nodiscard]] inline bool HasComponent(EntityID entity) { return m_ComponentMap.contains(entity); }
 
 		/// <summary>
 		/// Returns the size of the component list.
