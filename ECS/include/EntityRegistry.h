@@ -29,7 +29,7 @@ namespace ECS
 			, m_MaxEntityCount(4096)
 			, m_AvailableEntities(m_MaxEntityCount)
 			, m_Entities()
-			, m_EntityEvents(256)
+			//, m_EntityEvents(256)
 		{
 			Init();
 		}
@@ -73,8 +73,17 @@ namespace ECS
 				throw EntityIDOutOfRange();
 			if (!m_EntitiesSignature.contains(entity))
 				return;
+
+			for (auto[_, system] : m_Systems)
+			{
+				if (!((system->GetAcceptableSignature() & m_EntitiesSignature[entity].Signature) == system->GetAcceptableSignature()))
+					continue;
+				system->RemoveEntity(entity);
+			}
+
 			std::size_t count = m_EntitiesSignature[entity].Signature.count();
 			uint32_t i = -1;
+
 			while (count > 0)
 			{
 				if (!m_EntitiesSignature[entity].Signature[++i])
@@ -93,6 +102,30 @@ namespace ECS
 			m_EntitiesSignature[lastEntity].Index = entityIndex;
 			m_EntitiesSignature.erase(entity);
 			m_AvailableEntities.PushBack(entity);
+		}
+
+	public:
+		///////////////////////////////////////////////////////////////////
+		//// System operations ////////////////////////////////////////////
+		///////////////////////////////////////////////////////////////////
+
+		template<SystemConstraint T>
+		std::shared_ptr<T> CreateSystem()
+		{
+			assert(!m_Systems.contains(SystemType<T>()) && "You've already registered a system");
+			std::shared_ptr<T> system = std::make_shared<T>();
+			m_Systems.emplace({ SystemType<T>(), system });
+			m_Systems[SystemType<T>()]->OnAttach();
+
+			return system;
+		}
+
+		template<SystemConstraint T>
+		void RemoveSystem()
+		{
+			assert(m_Systems.contains(SystemType<T>()) && "You've already registered a system");
+			m_Systems[SystemType<T>()]->OnDetach();
+			m_Systems.erase(SystemType<T>());
 		}
 
 	public:
@@ -117,7 +150,16 @@ namespace ECS
 		#endif // _DEBUG
 
 			if (m_ComponentsLists[compType]->Remove(entity))
-				m_EntitiesSignature[entity].Signature &= compType.flip();
+			{
+				EntitySignature newSig = m_EntitiesSignature[entity].Signature & compType.flip();
+				for (auto [_, system] : m_Systems)
+				{
+					const EntitySignature& sysSig = system->GetAcceptableSignature();
+					if (((m_EntitiesSignature[entity].Signature & sysSig) == sysSig) && ((sysSig & newSig) != sysSig))
+						system->RemoveEntity(entity);
+				}
+				m_EntitiesSignature[entity].Signature = newSig;
+			}
 		}
 
 		/// <summary>
@@ -136,7 +178,14 @@ namespace ECS
 
 			std::shared_ptr<ComponentList<Comp>>& list = (std::shared_ptr<ComponentList<Comp>>&)m_ComponentsLists[compType];
 			list->Add(entity, component);
-			m_EntitiesSignature[entity].Signature |= compType;
+			EntitySignature newSig = m_EntitiesSignature[entity].Signature | compType;
+			for (auto [_, system] : m_Systems)
+			{
+				const EntitySignature& sysSig = system->GetAcceptableSignature();
+				if (((m_EntitiesSignature[entity].Signature & sysSig) != sysSig) && ((sysSig & newSig) == sysSig))
+					system->AddEntity(entity);
+			}
+			m_EntitiesSignature[entity].Signature = newSig;
 		}
 
 		/// <summary>
@@ -156,6 +205,13 @@ namespace ECS
 
 			std::shared_ptr<ComponentList<Comp>>& list = (std::shared_ptr<ComponentList<Comp>>&)m_ComponentsLists[compType];
 			Comp& component = list->Emplace(entity, std::forward<Args>(args)...);
+			EntitySignature newSig = m_EntitiesSignature[entity].Signature | compType;
+			for (auto [_, system] : m_Systems)
+			{
+				const EntitySignature& sysSig = system->GetAcceptableSignature();
+				if (((m_EntitiesSignature[entity].Signature & sysSig) != sysSig) && ((sysSig & newSig) == sysSig))
+					system->AddEntity(entity);
+			}
 			m_EntitiesSignature[entity].Signature |= compType;
 			return component;
 		}
@@ -265,24 +321,24 @@ namespace ECS
 			uint32_t Index = -1;
 		};
 
-		enum class EntityEventType
-		{
-			EntityCreated,
-			EntityDeleted,
-			ComponentAdded,
-			ComponentRemoved
-		};
+		//enum class EntityEventType
+		//{
+		//	EntityCreated,
+		//	EntityDeleted,
+		//	ComponentAdded,
+		//	ComponentRemoved
+		//};
 
-		struct EntityEvent
-		{
-			EntityEventType Type;
-			EntityID Entity;
-			ComponentTypeID ComponentType;
-		};
+		//struct EntityEvent
+		//{
+		//	EntityEventType Type;
+		//	EntityID Entity;
+		//	ComponentTypeID ComponentType;
+		//};
 
 		CircularBuffer<EntityID> m_AvailableEntities;
 		std::vector<EntityID> m_Entities;
-		CircularBuffer<EntityEvent> m_EntityEvents;
+		//CircularBuffer<EntityEvent> m_EntityEvents;
 		std::unordered_map<EntityID, SignatureEntityPair> m_EntitiesSignature;
 		std::unordered_map<SystemTypeID, std::shared_ptr<BaseSystem>> m_Systems;
 		std::unordered_map<ComponentTypeID, std::shared_ptr<IComponentList>> m_ComponentsLists;

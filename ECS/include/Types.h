@@ -34,7 +34,7 @@ namespace ECS
 	concept IsConstructibleConstraint = std::is_constructible_v<T, Args...>;
 
 	template<typename T>
-	concept SystemConstraint = DerivedFromConstraint<BaseSystem, T>;
+	concept SystemConstraint = DerivedFromConstraint<BaseSystem, T> && std::is_default_constructible_v<T>;
 
 	inline static const ComponentTypeID GetComponentTypeID()
 	{

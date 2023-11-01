@@ -10,9 +10,13 @@ namespace ECSTests
 		ComponentTypeID transformType = ComponentType<Transform>();
 		ComponentTypeID aType = ComponentType<A>();
 		ComponentTypeID bType = ComponentType<B>();
-		EXPECT_EQ(aType, ECS::ComponentType<A>());
-		EXPECT_EQ(bType, ECS::ComponentType<B>());
-		EXPECT_EQ(transformType, ECS::ComponentType<Transform>());
+		SystemTypeID systemType = SystemType<TestSystem>();
+		SystemTypeID systemType2 = SystemType<TestSystem2>();
+		EXPECT_EQ(aType, ComponentType<A>());
+		EXPECT_EQ(bType, ComponentType<B>());
+		EXPECT_EQ(transformType, ComponentType<Transform>());
+		EXPECT_EQ(systemType, SystemType<TestSystem>());
+		EXPECT_EQ(systemType2, SystemType<TestSystem2>());
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////
@@ -350,7 +354,7 @@ namespace ECSTests
 		EntityID entity2 = registry.CreateEntity();
 		registry.AddComponent(entity0, transform);
 		registry.AddComponent(entity1, a);
-		registry.AddComponent(entity2, b);
+		registry.EmplaceComponent<B>(entity2);
 		EXPECT_TRUE(registry.HasComponent<Transform>(entity0));
 		EXPECT_TRUE(registry.HasComponent<A>(entity1));
 		EXPECT_TRUE(registry.HasComponent<B>(entity2));
