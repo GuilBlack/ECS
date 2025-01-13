@@ -4,19 +4,16 @@
 
 namespace ECSTests
 {
+using namespace ecs;
+
     TEST(TypeTests, ComponentTypeTest)
     {
-        using namespace ECS;
         ComponentTypeID transformType = ComponentType<Transform>();
         ComponentTypeID aType = ComponentType<A>();
         ComponentTypeID bType = ComponentType<B>();
-        SystemTypeID systemType = SystemType<TestSystem>();
-        SystemTypeID systemType2 = SystemType<TestSystem2>();
         EXPECT_EQ(aType, ComponentType<A>());
         EXPECT_EQ(bType, ComponentType<B>());
         EXPECT_EQ(transformType, ComponentType<Transform>());
-        EXPECT_EQ(systemType, SystemType<TestSystem>());
-        EXPECT_EQ(systemType2, SystemType<TestSystem2>());
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////
@@ -25,7 +22,6 @@ namespace ECSTests
 
     TEST(CircularBufferTests, CreateCircularBuffer)
     {
-        using namespace ECS;
         CircularBuffer<int> buffer;
 
         EXPECT_EQ(buffer.GetCapacity(), 16);
@@ -36,7 +32,6 @@ namespace ECSTests
 
     TEST(CircularBufferTests, CircularBufferCount)
     {
-        using namespace ECS;
         CircularBuffer<int> buffer(3);
 
         EXPECT_EQ(buffer.GetSize(), 0);
@@ -55,7 +50,6 @@ namespace ECSTests
 
     TEST(CircularBufferTests, CircularBufferCreationStressTest)
     {
-        using namespace ECS;
         CircularBuffer<int> buffer(10000);
 
         EXPECT_EQ(buffer.GetCapacity(), 10000);
@@ -74,7 +68,6 @@ namespace ECSTests
 
     TEST(CircularBufferTests, CircularBufferAccessors)
     {
-        using namespace ECS;
         CircularBuffer<int> buffer(3);
 
         buffer.PushBack(1);
@@ -90,7 +83,6 @@ namespace ECSTests
 
     TEST(CircularBufferTests, CircularBufferResize)
     {
-        using namespace ECS;
         CircularBuffer<int> buffer(3);
         EXPECT_EQ(buffer.GetCapacity(), 3);
         for (int i = 0; i < 3; ++i)
@@ -109,7 +101,7 @@ namespace ECSTests
         EXPECT_EQ(buffer.GetSize(), 6);
         EXPECT_EQ(buffer.GetCapacity(), 6);
         buffer.PushBack(6);
-        EXPECT_EQ(buffer.GetCapacity(), uint32_t(6 * 1.5));
+        EXPECT_EQ(buffer.GetCapacity(), uint32_t(6 * 2));
         EXPECT_EQ(buffer.GetSize(), 7);
         buffer.Resize(7U);
         EXPECT_EQ(buffer.GetCapacity(), 7U);
@@ -127,7 +119,6 @@ namespace ECSTests
 
     TEST(CircularBufferTests, CircularBufferComplexStructTest)
     {
-        using namespace ECS;
         CircularBuffer<ComplexStruct> buffer(3);
 
         EXPECT_EQ(buffer.GetCapacity(), 3);
@@ -180,231 +171,638 @@ namespace ECSTests
         EXPECT_EQ(buffer3.GetCapacity(), buffer2.GetCapacity());
     }
 
-#if CIRCULAR_BUFFER_STRESS_TEST
+#ifdef CIRCULAR_BUFFER_STRESS_TEST
     TEST(CircularBufferTests, CircularBufferStressResize)
     {
-        using namespace ECS;
         CircularBuffer<uint8_t> buffer(uint32_t(std::numeric_limits<uint32_t>::max() / 2));
         EXPECT_EQ(buffer.GetCapacity(), uint32_t(std::numeric_limits<uint32_t>::max() / 2));
-        for (uint32_t i = 0; i < uint32_t(std::numeric_limits<uint32_t>::max() / 1.5); ++i)
+        for (uint32_t i = 0; i < uint32_t(std::numeric_limits<uint32_t>::max() / 2); ++i)
             buffer.PushBack(uint8_t(i) % std::numeric_limits<uint8_t>::max());
-        EXPECT_EQ(buffer.GetSize(), uint32_t(std::numeric_limits<uint32_t>::max() / 1.5));
-        EXPECT_EQ(buffer.GetCapacity(), uint32_t((std::numeric_limits<uint32_t>::max() / 2) * 1.5));
+        EXPECT_EQ(buffer.GetSize(), uint32_t(std::numeric_limits<uint32_t>::max() / 2));
+        EXPECT_EQ(buffer.GetCapacity(), uint32_t((std::numeric_limits<uint32_t>::max() / 2)));
+        buffer.PushBack(1);
+        EXPECT_EQ(buffer.GetCapacity(), uint32_t((std::numeric_limits<uint32_t>::max() / 2) * 2));
     }
 #endif // CIRCULAR_BUFFER_STRESS_TEST
 
-
     ////////////////////////////////////////////////////////////////////////////////////////
-    // ComponentStorage Tests //////////////////////////////////////////////////////////////
-    ////////////////////////////////////////////////////////////////////////////////////////
-
-    // Unit test to check if all the functions in the ComponentList class work as intended
-    TEST(ComponentStorageTest, ComponentStorageGetTest)
-    {
-        using namespace ECS;
-        ComponentList<Transform> transformList;
-        ComponentList<A> aList;
-        ComponentList<B> bList;
-        Transform transform;
-        A a;
-        B b;
-        EntityID entity0 = 0;
-        EntityID entity1 = 1;
-        EntityID entity2 = 2;
-        transformList.Add(entity0, transform);
-        aList.Add(entity1, a);
-        bList.Add(entity2, b);
-        EXPECT_EQ(transformList.GetComponent(entity0), transform);
-        EXPECT_EQ(aList.GetComponent(entity1), a);
-        EXPECT_EQ(bList.GetComponent(entity2), b);
-    }
-
-    TEST(ComponentStorageTest, ComponentStorageHasTest)
-    {
-        using namespace ECS;
-        ComponentList<Transform> transformList;
-        ComponentList<A> aList;
-        ComponentList<B> bList;
-        Transform transform;
-        A a;
-        B b;
-        EntityID entity0 = 0;
-        EntityID entity1 = 1;
-        EntityID entity2 = 2;
-        transformList.Add(entity0, transform);
-        aList.Add(entity1, a);
-        bList.Add(entity2, b);
-        EXPECT_TRUE(transformList.HasComponent(entity0));
-        EXPECT_TRUE(aList.HasComponent(entity1));
-        EXPECT_TRUE(bList.HasComponent(entity2));
-    }
-
-    TEST(ComponentStorageTest, ComponentStorageRemoveTest)
-    {
-        using namespace ECS;
-        ComponentList<Transform> transformList;
-        ComponentList<A> aList;
-        ComponentList<B> bList;
-        Transform transform;
-        A a;
-        B b;
-        EntityID entity0 = 0;
-        EntityID entity1 = 1;
-        EntityID entity2 = 2;
-        transformList.Add(entity0, transform);
-        aList.Add(entity1, a);
-        bList.Add(entity2, b);
-        EXPECT_TRUE(transformList.HasComponent(entity0));
-        EXPECT_TRUE(aList.HasComponent(entity1));
-        EXPECT_TRUE(bList.HasComponent(entity2));
-        transformList.Remove(entity0);
-        aList.Remove(entity1);
-        bList.Remove(entity2);
-        EXPECT_FALSE(transformList.HasComponent(entity0));
-        EXPECT_FALSE(aList.HasComponent(entity1));
-        EXPECT_FALSE(bList.HasComponent(entity2));
-    }
-
-    TEST(ComponentStorageTest, ComponentStorageEmplaceTest)
-    {
-        using namespace ECS;
-        ComponentList<Transform> transformList;
-        ComponentList<A> aList;
-        ComponentList<B> bList;
-        EntityID entity0 = 0;
-        EntityID entity1 = 1;
-
-        Transform t = transformList.Emplace(entity0);
-        A a = aList.Emplace(entity0);
-        B b = bList.Emplace(entity0);
-
-        EXPECT_TRUE(transformList.HasComponent(entity0));
-        EXPECT_TRUE(aList.HasComponent(entity0));
-        EXPECT_TRUE(bList.HasComponent(entity0));
-        EXPECT_EQ(transformList.GetComponent(entity0), t);
-        EXPECT_EQ(aList.GetComponent(entity0), a);
-        EXPECT_EQ(bList.GetComponent(entity0), b);
-
-        t = transformList.Emplace(entity1, Transform({ 0,0,0 }, { 0, 0, 0 }, { 1, 1, 1 }));
-        a = aList.Emplace(entity1, 0);
-        b = bList.Emplace(entity1, B());
-
-        EXPECT_EQ(transformList.GetComponent(entity0), t);
-        EXPECT_EQ(aList.GetComponent(entity0), a);
-        EXPECT_EQ(bList.GetComponent(entity0), b);
-        EXPECT_EQ(transformList.Size(), 2);
-        EXPECT_EQ(aList.Size(), 2);
-        EXPECT_EQ(bList.Size(), 2);
-    }
-
-    TEST(ComponentStorageTest, ComponentStorageReplaceOrEmplaceTest)
-    {
-        
-    }
-
-    ////////////////////////////////////////////////////////////////////////////////////////
-    // EntityRegistry Tests ////////////////////////////////////////////////////////////////
+    // Archetype Tests /////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////////////////
 
-    TEST(EntityRegistryTest, CreateEntity)
+    class ArchetypeTest : public ::testing::Test
     {
-        using namespace ECS;
-        EntityRegistry registry;
-        registry.CreateComponentStorage<Transform, A, B>();
+    protected:
+        void SetUp() override
+        {
+            archetype = new ecs::Archetype();
+        }
 
-        EntityID entity0 = registry.CreateEntity();
-        EntityID entity1 = registry.CreateEntity();
-        EntityID entity2 = registry.CreateEntity();
+        void TearDown() override
+        {
+            delete archetype;
+        }
 
-        EXPECT_EQ(entity0, 0);
-        EXPECT_EQ(entity1, 1);
-        EXPECT_EQ(entity2, 2);
+        ecs::Archetype* archetype{nullptr};
+    };
+
+    TEST_F(ArchetypeTest, AddEntityTest)
+    {
+        EntityID e1 = 1;
+        archetype->AddEntity(e1);
+
+        const auto& entities = archetype->GetEntities();
+        ASSERT_EQ(entities.size(), 1);
+        EXPECT_EQ(entities[0], e1);
     }
 
-    // Unit test to check if all the functions in the EntityRegistry class work as intended
-    TEST(EntityRegistryTest, GetComponent)
+    TEST_F(ArchetypeTest, RemoveEntityTest)
     {
-        using namespace ECS;
-        EntityRegistry registry;
-        registry.CreateComponentStorage<Transform, A, B>();
-        Transform transform;
-        A a;
-        B b;
-        EntityID entity0 = registry.CreateEntity();
-        EntityID entity1 = registry.CreateEntity();
-        EntityID entity2 = registry.CreateEntity();
-        registry.AddComponent(entity0, transform);
-        registry.AddComponent(entity1, a);
-        registry.AddComponent(entity2, b);
-        EXPECT_EQ(registry.GetComponent<Transform>(entity0), transform);
-        EXPECT_EQ(registry.GetComponent<A>(entity1), a);
-        EXPECT_EQ(registry.GetComponent<B>(entity2), b);
+        EntityID e1 = 1;
+        EntityID e2 = 2;
+        EntityID e3 = 3;
+
+        archetype->AddEntity(e1);
+        archetype->AddEntity(e2);
+        archetype->AddEntity(e3);
+        archetype->RemoveEntity(e2);
+
+        const auto& entities = archetype->GetEntities();
+        ASSERT_EQ(entities.size(), 2);
+        EXPECT_EQ(entities[0], e1);
+        EXPECT_NE(entities[1], e2);
+        EXPECT_EQ(entities[1], e3);
+        archetype->AddEntity(e2);
+        ASSERT_EQ(entities.size(), 3);
+        EXPECT_EQ(entities[2], e2);
+        archetype->RemoveEntity(e1);
+        ASSERT_EQ(entities.size(), 2);
+        EXPECT_NE(entities[0], e1);
+        EXPECT_EQ(entities[0], e2);
+
+        EXPECT_FALSE(archetype->HasEntity(e1));
+        EXPECT_TRUE(archetype->HasEntity(e2));
+        EXPECT_TRUE(archetype->HasEntity(e3));
     }
 
-    TEST(EntityRegistryTest, HasComponent)
+    TEST_F(ArchetypeTest, CreateAndAddComponentTest)
     {
-        using namespace ECS;
-        EntityRegistry registry;
-        registry.CreateComponentStorage<Transform, A, B>();
-        Transform transform;
-        A a;
-        B b;
-        EntityID entity0 = registry.CreateEntity();
-        EntityID entity1 = registry.CreateEntity();
-        EntityID entity2 = registry.CreateEntity();
-        registry.AddComponent(entity0, transform);
-        registry.AddComponent(entity1, a);
-        registry.EmplaceComponent<B>(entity2);
-        EXPECT_TRUE(registry.HasComponent<Transform>(entity0));
-        EXPECT_TRUE(registry.HasComponent<A>(entity1));
-        EXPECT_TRUE(registry.HasComponent<B>(entity2));
+        EntityID e1 = 1;
+        archetype->CreateComponentStorages<Transform, A>();
+
+        archetype->AddEntity(e1);
+        archetype->AddComponents<Transform, A>(e1, Transform({ 1, 2, 3 }, { 4, 5, 6 }, { 7, 8, 9 }), A(42));
+
+        auto& transformStorage = archetype->GetComponentStorage<Transform>();
+        auto& aStorage = archetype->GetComponentStorage<A>();
+
+        ASSERT_EQ(transformStorage.Components.size(), 1);
+        ASSERT_EQ(aStorage.Components.size(), 1);
+
+        EXPECT_EQ(transformStorage.Components[0], Transform({ 1, 2, 3 }, { 4, 5, 6 }, { 7, 8, 9 }));
+        EXPECT_EQ(aStorage.Components[0], A(42));
     }
 
-    TEST(EntityRegistryTest, DeleteComponent)
+    TEST_F(ArchetypeTest, RemoveComponentTest)
     {
-        using namespace ECS;
-        EntityRegistry registry;
-        registry.CreateComponentStorage<Transform, A, B>();
-        Transform transform;
-        A a;
-        B b;
-        EntityID entity0 = registry.CreateEntity();
-        EntityID entity1 = registry.CreateEntity();
-        EntityID entity2 = registry.CreateEntity();
-        registry.AddComponent(entity0, transform);
-        registry.AddComponent(entity1, a);
-        registry.AddComponent(entity2, b);
-        registry.AddComponent(entity0, a);
-        registry.AddComponent(entity1, b);
-        registry.AddComponent(entity2, transform);
-        EXPECT_TRUE(registry.HasComponent<Transform>(entity0));
-        EXPECT_TRUE(registry.HasComponent<A>(entity1));
-        EXPECT_TRUE(registry.HasComponent<B>(entity2));
-        registry.DeleteComponent<Transform>(entity0);
-        registry.DeleteComponent<A>(entity1);
-        registry.DeleteComponent<B>(entity2);
-        EXPECT_FALSE(registry.HasComponent<Transform>(entity0));
-        EXPECT_FALSE(registry.HasComponent<A>(entity1));
-        EXPECT_FALSE(registry.HasComponent<B>(entity2));
+        EntityID e1 = 1;
+        archetype->CreateComponentStorages<Transform, A>();
+
+        archetype->AddEntity(e1);
+        archetype->AddComponents<Transform, A>(e1, Transform({ 1, 2, 3 }, { 4, 5, 6 }, { 7, 8, 9 }), A(42));
+
+        archetype->RemoveComponent<Transform>(e1);
+
+        auto& aStorage = archetype->GetComponentStorage<A>();
+        ASSERT_EQ(aStorage.Components.size(), 1);
+        EXPECT_EQ(aStorage.Components[0], A(42));
     }
 
-    TEST(EntityRegistryTest, DeleteEntity)
+    TEST_F(ArchetypeTest, RemoveAllComponentsTest)
     {
-        using namespace ECS;
-        EntityRegistry registry;
-        registry.CreateComponentStorage<Transform, A, B>();
-        Transform transform;
-        A a;
-        B b;
-        EntityID entity0 = registry.CreateEntity();
-        registry.AddComponent(entity0, transform);
-        registry.AddComponent(entity0, b);
-        EXPECT_TRUE(registry.HasComponent<Transform>(entity0));
-        EXPECT_TRUE(registry.HasComponent<B>(entity0));
-        registry.DeleteEntity(entity0);
-        EXPECT_FALSE(registry.HasComponent<Transform>(entity0));
-        EXPECT_FALSE(registry.HasComponent<B>(entity0));
-        registry.DeleteEntity(entity0);
+        EntityID e1 = 1;
+        EntityID e2 = 2;
+        EntityID e3 = 3;
+
+        archetype->CreateComponentStorages<Transform, A, B>();
+
+        archetype->AddEntity(e1);
+        archetype->AddEntity(e2);
+        archetype->AddEntity(e3);
+
+        archetype->AddComponents<Transform, A, B>(e1, Transform({ 1, 1, 1 }, { 0, 0, 0 }, { 1, 1, 1 }), A(10), B{ "Entity1" });
+        archetype->AddComponents<Transform, A, B>(e2, Transform({ 2, 2, 2 }, { 0, 0, 0 }, { 1, 1, 1 }), A(20), B{ "Entity2" });
+        archetype->AddComponents<Transform, A, B>(e3, Transform({ 3, 3, 3 }, { 0, 0, 0 }, { 1, 1, 1 }), A(30), B{ "Entity3" });
+
+        // Remove components for the second entity (e2)
+        archetype->RemoveComponents<Transform, A, B>(e2);
+
+        auto& transformStorage = archetype->GetComponentStorage<Transform>();
+        auto& aStorage = archetype->GetComponentStorage<A>();
+        auto& bStorage = archetype->GetComponentStorage<B>();
+
+        ASSERT_EQ(transformStorage.Components.size(), 2);
+        ASSERT_EQ(aStorage.Components.size(), 2);
+        ASSERT_EQ(bStorage.Components.size(), 2);
+
+        EXPECT_EQ(transformStorage.Components[0], Transform({ 1, 1, 1 }, { 0, 0, 0 }, { 1, 1, 1 }));
+        EXPECT_EQ(transformStorage.Components[1], Transform({ 3, 3, 3 }, { 0, 0, 0 }, { 1, 1, 1 }));
+
+        EXPECT_EQ(aStorage.Components[0], A(10));
+        EXPECT_EQ(aStorage.Components[1], A(30));
+
+        EXPECT_EQ(bStorage.Components[0], B{ "Entity1" });
+        EXPECT_EQ(bStorage.Components[1], B{ "Entity3" });
     }
 
+    TEST_F(ArchetypeTest, HandleInvalidEntityRemoval)
+    {
+        EntityID invalidEntity = 999;
+
+        // Ensure no crash occurs when removing a non-existent entity
+        EXPECT_NO_THROW(archetype->RemoveEntity(invalidEntity));
+    }
+
+    TEST_F(ArchetypeTest, HandleInvalidComponentRemoval)
+    {
+        EntityID e1 = 1;
+        archetype->CreateComponentStorages<Transform>();
+        archetype->AddEntity(e1);
+        archetype->AddComponents<Transform>(e1, Transform({ 1, 2, 3 }, { 4, 5, 6 }, { 7, 8, 9 }));
+
+        // Ensure no crash occurs when removing a component that doesn't exist
+        EXPECT_NO_THROW(archetype->RemoveComponent<A>(e1));
+    }
+
+////////////////////////////////////////////////////////////////////////////////////////
+// EntityRegistry Tests ////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////
+class EntityRegistryTest : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        ecs::EntityRegistry::RegisterComponentTypes<Transform, A, B>();
+    }
+};
+
+TEST_F(EntityRegistryTest, CreateEntity)
+{
+    using namespace ecs;
+    ecs::EntityRegistry registry;
+
+    EntityID entity0 = registry.CreateEntity();
+    EntityID entity1 = registry.CreateEntity();
+    EntityID entity2 = registry.CreateEntity();
+
+    EXPECT_EQ(entity0, 0);
+    EXPECT_EQ(entity1, 1);
+    EXPECT_EQ(entity2, 2);
+}
+
+// Unit test to check if all the functions in the EntityRegistry class work as intended
+TEST_F(EntityRegistryTest, GetComponent)
+{
+    using namespace ecs;
+    ecs::EntityRegistry registry;
+
+    Transform transform;
+    A a;
+    B b;
+    EntityID entity0 = registry.CreateEntity();
+    EntityID entity1 = registry.CreateEntity();
+    EntityID entity2 = registry.CreateEntity();
+    registry.TryAddComponent(entity0, transform);
+    registry.TryAddComponent(entity1, a);
+    registry.TryAddComponent(entity2, b);
+    EXPECT_EQ(registry.GetComponent<Transform>(entity0), transform);
+    EXPECT_EQ(registry.GetComponent<A>(entity1), a);
+    EXPECT_EQ(registry.GetComponent<B>(entity2), b);
+}
+
+TEST_F(EntityRegistryTest, HasComponent)
+{
+    using namespace ecs;
+    ecs::EntityRegistry registry;
+
+    Transform transform;
+    A a;
+    B b;
+    EntityID entity0 = registry.CreateEntity();
+    EntityID entity1 = registry.CreateEntity();
+    EntityID entity2 = registry.CreateEntity();
+    registry.TryAddComponent(entity0, transform);
+    registry.TryAddComponent(entity1, a);
+    registry.EmplaceComponent<B>(entity2);
+    EXPECT_TRUE(registry.HasComponent<Transform>(entity0));
+    EXPECT_TRUE(registry.HasComponent<A>(entity1));
+    EXPECT_TRUE(registry.HasComponent<B>(entity2));
+}
+
+TEST_F(EntityRegistryTest, DeleteComponent)
+{        
+    using namespace ecs;
+    ecs::EntityRegistry registry;
+
+    Transform transform;
+    A a;
+    B b;
+    EntityID entity0 = registry.CreateEntity();
+    EntityID entity1 = registry.CreateEntity();
+    EntityID entity2 = registry.CreateEntity();
+    registry.TryAddComponent(entity0, transform);
+    registry.TryAddComponent(entity1, a);
+    registry.TryAddComponent(entity2, b);
+    registry.TryAddComponent(entity0, a);
+    registry.TryAddComponent(entity1, b);
+    registry.TryAddComponent(entity2, transform);
+    EXPECT_TRUE(registry.HasComponent<Transform>(entity0));
+    EXPECT_TRUE(registry.HasComponent<A>(entity1));
+    EXPECT_TRUE(registry.HasComponent<B>(entity2));
+    bool r = registry.HasComponents<Transform, B>(entity2);
+    EXPECT_TRUE(r);
+    registry.DeleteComponent<Transform>(entity0);
+    registry.DeleteComponent<A>(entity1);
+    registry.DeleteComponent<B>(entity2);
+    EXPECT_TRUE(registry.HasComponent<Transform>(entity0)); 
+    EXPECT_TRUE(registry.HasComponent<A>(entity1)); 
+    EXPECT_TRUE(registry.HasComponent<B>(entity2)); 
+    registry.Flush();
+    EXPECT_FALSE(registry.HasComponent<Transform>(entity0));
+    EXPECT_FALSE(registry.HasComponent<A>(entity1));
+    EXPECT_FALSE(registry.HasComponent<B>(entity2));
+}
+
+TEST_F(EntityRegistryTest, DeleteEntity)
+{
+    using namespace ecs;
+    ecs::EntityRegistry registry;
+
+    Transform transform;
+    A a;
+    B b;
+    EntityID entity0 = registry.CreateEntity();
+    registry.TryAddComponent(entity0, transform);
+    registry.TryAddComponent(entity0, b);
+    EXPECT_TRUE(registry.HasComponent<Transform>(entity0));
+    EXPECT_TRUE(registry.HasComponent<B>(entity0));
+    registry.DeleteEntity(entity0);
+    EXPECT_TRUE(registry.HasComponent<Transform>(entity0));
+    EXPECT_TRUE(registry.HasComponent<B>(entity0));
+    registry.Flush();
+    EXPECT_FALSE(registry.HasComponent<Transform>(entity0));
+    EXPECT_FALSE(registry.HasComponent<B>(entity0));
+    registry.DeleteEntity(entity0);
+    registry.Flush();
+}
+
+TEST_F(EntityRegistryTest, EntityStressTest)
+{
+    using namespace ecs;
+    ecs::EntityRegistry registry;
+    {
+        SCOPED_TRACE("Create entities");
+        for (int i = 0; i < 10000; i++)
+        {
+            try
+            {
+                EntityID entity = registry.CreateEntity();
+                Transform transform{{(float)-i, (float)i, (float)i * 10}, {0, 0, 0}, {1, 1, 1}};
+                A a{i};
+                B b{"Entity" + std::to_string(i)};
+                registry.TryAddComponent(entity, transform);
+                registry.TryAddComponent(entity, a);
+                registry.TryAddComponent(entity, b);
+                bool r = registry.HasComponents<Transform, A, B>(entity);
+                EXPECT_TRUE(r);
+            }
+            catch (const std::exception& e)
+            {
+                SUCCEED() << e.what();
+                break;
+            }
+        }
+    }
+    {
+        SCOPED_TRACE("Delete Components");
+        for (EntityID entity = 100; entity < 420; entity++)
+        {
+            registry.DeleteComponent<Transform>(entity);
+        }
+        for (EntityID entity = 420; entity < 1000; entity++)
+        {
+            registry.DeleteComponent<A>(entity);
+        }
+        for (EntityID entity = 1000; entity < 1400; entity++)
+        {
+            registry.DeleteComponent<B>(entity);
+        }
+        for (EntityID entity = 1400; entity < 1800; entity++)
+        {
+            registry.DeleteComponent<Transform>(entity);
+            registry.DeleteComponent<B>(entity);
+        }
+        {
+            SCOPED_TRACE("Flush");
+            registry.Flush();
+        }
+        for (EntityID entity = 100; entity < 420; entity++)
+        {
+            EXPECT_FALSE(registry.HasComponent<Transform>(entity));
+            EXPECT_TRUE(registry.HasComponent<A>(entity));
+            EXPECT_TRUE(registry.HasComponent<B>(entity));
+        }
+        for (EntityID entity = 420; entity < 1000; entity++)
+        {
+            EXPECT_FALSE(registry.HasComponent<A>(entity));
+            EXPECT_TRUE(registry.HasComponent<B>(entity));
+            EXPECT_TRUE(registry.HasComponent<Transform>(entity));
+        }
+        for (EntityID entity = 1000; entity < 1400; entity++)
+        {
+            EXPECT_FALSE(registry.HasComponent<B>(entity));
+            EXPECT_TRUE(registry.HasComponent<A>(entity));
+            EXPECT_TRUE(registry.HasComponent<Transform>(entity));
+        }
+        for (EntityID entity = 1400; entity < 1800; entity++)
+        {
+            EXPECT_FALSE(registry.HasComponent<Transform>(entity));
+            EXPECT_FALSE(registry.HasComponent<B>(entity));
+            EXPECT_TRUE(registry.HasComponent<A>(entity));
+        }
+    }
+    {
+        SCOPED_TRACE("Delete Entities");
+        for (int i = 696; i < 756; i++)
+        {
+            registry.DeleteEntity(i);    
+        }
+        for (int i = 1800; i < 2120; i++)
+        {
+            registry.DeleteEntity(i);
+        }
+        {
+            SCOPED_TRACE("Flush");
+            registry.Flush();
+        }
+        for (int i = 696; i < 756; i++)
+        {
+            EXPECT_FALSE(registry.IsEntityValid(i));  
+        }
+        for (int i = 1800; i < 2120; i++)
+        {
+            EXPECT_FALSE(registry.IsEntityValid(i));
+        }
+    }
+    {
+        SCOPED_TRACE("Verify Component Values");
+        for (EntityID entity = 0; entity < 4096; entity++)
+        {
+            if (entity >= 100 && entity < 420)
+            {
+                EXPECT_FALSE(registry.HasComponent<Transform>(entity));
+                EXPECT_TRUE(registry.HasComponent<A>(entity));
+                EXPECT_TRUE(registry.HasComponent<B>(entity));
+                EXPECT_EQ(registry.GetComponent<A>(entity).Hello, A{(int)entity}.Hello);
+                EXPECT_EQ(registry.GetComponent<B>(entity).s, B{"Entity" + std::to_string(entity)}.s);
+            }
+            else if (entity >= 420 && entity < 1000)
+            {
+                if (entity >= 696 && entity < 756)
+                {
+                    EXPECT_FALSE(registry.IsEntityValid(entity));
+                    continue;
+                }
+                EXPECT_FALSE(registry.HasComponent<A>(entity));
+                EXPECT_TRUE(registry.HasComponent<B>(entity));
+                EXPECT_TRUE(registry.HasComponent<Transform>(entity));
+                EXPECT_EQ(registry.GetComponent<B>(entity).s, B{"Entity" + std::to_string(entity)}.s);
+                auto t = Transform{{(float)-(int)entity, (float)entity, (float)entity * 10}, {0, 0, 0}, {1, 1, 1}};
+                EXPECT_EQ(registry.GetComponent<Transform>(entity).Position, t.Position);
+            }
+            else if (entity >= 1000 && entity < 1400)
+            {
+                EXPECT_FALSE(registry.HasComponent<B>(entity));
+                EXPECT_TRUE(registry.HasComponent<A>(entity));
+                EXPECT_TRUE(registry.HasComponent<Transform>(entity));
+                EXPECT_EQ(registry.GetComponent<A>(entity).Hello, A{(int)entity}.Hello);
+                auto t = Transform{{(float)-(int)entity, (float)entity, (float)entity * 10}, {0, 0, 0}, {1, 1, 1}};
+                EXPECT_EQ(registry.GetComponent<Transform>(entity).Position, t.Position);
+            }
+            else if (entity >= 1400 && entity < 1800)
+            {
+                EXPECT_FALSE(registry.HasComponent<Transform>(entity));
+                EXPECT_FALSE(registry.HasComponent<B>(entity));
+                EXPECT_TRUE(registry.HasComponent<A>(entity));
+                EXPECT_EQ(registry.GetComponent<A>(entity).Hello, A{(int)entity}.Hello);
+            }
+            else if (entity >= 1800 && entity < 2120)
+            {
+                EXPECT_FALSE(registry.IsEntityValid(entity));
+            }
+            else
+            {
+                EXPECT_TRUE(registry.HasComponent<Transform>(entity));
+                EXPECT_TRUE(registry.HasComponent<A>(entity));
+                EXPECT_TRUE(registry.HasComponent<B>(entity));
+            }
+        }
+    }
+}
+
+TEST_F(EntityRegistryTest, AddAndVerifyComponents)
+{
+    ecs::EntityRegistry registry;
+
+    EntityID entity0 = registry.CreateEntity();
+    Transform transform{ {1.0f, 2.0f, 3.0f}, {0,0,0}, {1,1,1} };
+    A a{ 42 };
+
+    registry.TryAddComponent(entity0, transform);
+    registry.TryAddComponent(entity0, a);
+    EXPECT_EQ(registry.GetComponent<Transform>(entity0).Position, transform.Position);
+    EXPECT_EQ(registry.GetComponent<A>(entity0).Hello, a.Hello);
+}
+
+TEST_F(EntityRegistryTest, DeleteComponentsPreservesOtherComponents)
+{
+    ecs::EntityRegistry registry;
+
+    EntityID entity0 = registry.CreateEntity();
+    Transform transform{ {1.0f, 2.0f, 3.0f}, {0,0,0}, {1,1,1} };
+    A a{ 42 };
+
+    registry.TryAddComponent(entity0, transform);
+    registry.TryAddComponent(entity0, a);
+
+    registry.DeleteComponent<Transform>(entity0);
+    registry.Flush();
+
+    EXPECT_FALSE(registry.HasComponent<Transform>(entity0));
+    EXPECT_TRUE(registry.HasComponent<A>(entity0));
+    EXPECT_EQ(registry.GetComponent<A>(entity0).Hello, a.Hello);
+}
+
+TEST_F(EntityRegistryTest, DeleteEntityCleansUpComponents)
+{
+    ecs::EntityRegistry registry;
+    EntityID entity0 = registry.CreateEntity();
+    EXPECT_TRUE(registry.IsEntityValid(entity0));
+    Transform transform{ {1.0f, 2.0f, 3.0f}, {0,0,0}, {1,1,1} };
+    A a{ 42 };
+
+    registry.TryAddComponent(entity0, transform);
+    registry.TryAddComponent(entity0, a);
+
+    registry.DeleteEntity(entity0);
+    registry.Flush();
+
+    EXPECT_FALSE(registry.IsEntityValid(entity0));
+    EXPECT_FALSE(registry.HasComponent<Transform>(entity0));
+    EXPECT_FALSE(registry.HasComponent<A>(entity0));
+}
+
+TEST_F(EntityRegistryTest, MultipleEntitiesWithSameSignature) {
+    ecs::EntityRegistry registry;
+    Transform t1{ {1.0f, 2.0f, 3.0f}, {0,0,0}, {1,1,1} };
+    Transform t2{ {4.0f, 5.0f, 6.0f}, {0,0,0}, {1,1,1} };
+    Transform t3{ {7.0f, 8.0f, 9.0f}, {0,0,0}, {1,1,1} };
+    Transform t4{ {10.0f, 11.0f, 12.0f}, {0,0,0}, {1,1,1} };
+    Transform t5{ {13.0f, 14.0f, 15.0f}, {0,0,0}, {1,1,1} };
+    A a1{ 42 };
+    A a2{ 84 };
+    A a3{ 126 };
+    A a4{ 168 };
+    A a5{ 210 };
+
+    EntityID entity0 = registry.CreateEntity();
+    EntityID entity1 = registry.CreateEntity();
+    EntityID entity2 = registry.CreateEntity();
+    EntityID entity3 = registry.CreateEntity();
+    EntityID entity4 = registry.CreateEntity();
+
+    registry.TryAddComponent(entity0, t1);
+    registry.TryAddComponent(entity0, a1);
+    registry.TryAddComponent(entity1, t2);
+    registry.TryAddComponent(entity1, a2);
+    registry.TryAddComponent(entity2, t3);
+    registry.TryAddComponent(entity2, a3);
+    registry.TryAddComponent(entity3, t4);
+    registry.TryAddComponent(entity3, a4);
+    registry.TryAddComponent(entity4, t5);
+    registry.TryAddComponent(entity4, a5);
+
+    EXPECT_EQ(registry.GetComponent<Transform>(entity0).Position, t1.Position);
+    EXPECT_EQ(registry.GetComponent<A>(entity0).Hello, a1.Hello);
+
+    EXPECT_EQ(registry.GetComponent<Transform>(entity1).Position, t2.Position);
+    EXPECT_EQ(registry.GetComponent<A>(entity1).Hello, a2.Hello);
+
+    EXPECT_EQ(registry.GetComponent<Transform>(entity2).Position, t3.Position);
+    EXPECT_EQ(registry.GetComponent<A>(entity2).Hello, a3.Hello);
+
+    EXPECT_EQ(registry.GetComponent<Transform>(entity3).Position, t4.Position);
+    EXPECT_EQ(registry.GetComponent<A>(entity3).Hello, a4.Hello);
+
+    EXPECT_EQ(registry.GetComponent<Transform>(entity4).Position, t5.Position);
+    EXPECT_EQ(registry.GetComponent<A>(entity4).Hello, a5.Hello);
+
+    registry.DeleteComponent<Transform>(entity0);
+    registry.Flush();
+
+    EXPECT_FALSE(registry.HasComponent<Transform>(entity0));
+    EXPECT_EQ(registry.GetComponent<A>(entity0).Hello, a1.Hello);
+
+    EXPECT_EQ(registry.GetComponent<Transform>(entity1).Position, t2.Position);
+    EXPECT_EQ(registry.GetComponent<A>(entity1).Hello, a2.Hello);
+
+    EXPECT_EQ(registry.GetComponent<Transform>(entity2).Position, t3.Position);
+    EXPECT_EQ(registry.GetComponent<A>(entity2).Hello, a3.Hello);
+
+    EXPECT_EQ(registry.GetComponent<Transform>(entity3).Position, t4.Position);
+    EXPECT_EQ(registry.GetComponent<A>(entity3).Hello, a4.Hello);
+
+    EXPECT_EQ(registry.GetComponent<Transform>(entity4).Position, t5.Position);
+    EXPECT_EQ(registry.GetComponent<A>(entity4).Hello, a5.Hello);
+}
+
+TEST_F(EntityRegistryTest, MigrateEntityBetweenArchetypes) {
+    ecs::EntityRegistry registry;
+    Transform t{ {1.0f, 2.0f, 3.0f}, {0,0,0}, {1,1,1} };
+    A a{ 42 };
+    B b{ "SD" };
+
+    EntityID entity = registry.CreateEntity();
+
+    registry.TryAddComponent(entity, t);
+    registry.TryAddComponent(entity, a);
+
+    EXPECT_EQ(registry.GetComponent<Transform>(entity).Position, t.Position);
+    EXPECT_EQ(registry.GetComponent<A>(entity).Hello, a.Hello);
+
+    registry.TryAddComponent(entity, b);
+
+    EXPECT_EQ(registry.GetComponent<B>(entity).s, b.s);
+
+    registry.DeleteComponent<A>(entity);
+    registry.Flush();
+
+    EXPECT_FALSE(registry.HasComponent<A>(entity));
+    EXPECT_EQ(registry.GetComponent<Transform>(entity).Position, t.Position);
+    EXPECT_EQ(registry.GetComponent<B>(entity).s, b.s);
+}
+
+TEST_F(EntityRegistryTest, VerifyStateAfterComplexOperations) {
+    ecs::EntityRegistry registry;
+    Transform t1{ {1.0f, 2.0f, 3.0f}, {0,0,0}, {1,1,1}  };
+    Transform t2{ {4.0f, 5.0f, 6.0f}, {0,0,0}, {1,1,1}  };
+    Transform t3{ {7.0f, 8.0f, 9.0f}, {0,0,0}, {1,1,1}  };
+    Transform t4{ {10.0f, 11.0f, 12.0f}, {0,0,0}, {1,1,1}  };
+    Transform t5{ {13.0f, 14.0f, 15.0f}, {0,0,0}, {1,1,1}  };
+    A a1{ 42 };
+    A a2{ 84 };
+    A a3{ 126 };
+    A a4{ 168 };
+    A a5{ 210 };
+    B b1{ "S1" };
+    B b2{ "S2" };
+
+    EntityID entity0 = registry.CreateEntity();
+    EntityID entity1 = registry.CreateEntity();
+    EntityID entity2 = registry.CreateEntity();
+    EntityID entity3 = registry.CreateEntity();
+    EntityID entity4 = registry.CreateEntity();
+
+    registry.TryAddComponent(entity0, t1);
+    registry.TryAddComponent(entity0, a1);
+    registry.TryAddComponent(entity1, t2);
+    registry.TryAddComponent(entity1, b1);
+    registry.TryAddComponent(entity2, t3);
+    registry.TryAddComponent(entity2, a2);
+    registry.TryAddComponent(entity3, t4);
+    registry.TryAddComponent(entity3, b2);
+    registry.TryAddComponent(entity4, t5);
+    registry.TryAddComponent(entity4, a3);
+
+    registry.DeleteComponent<Transform>(entity0);
+    registry.DeleteEntity(entity1);
+
+    registry.Flush();
+
+    EXPECT_FALSE(registry.IsEntityValid(entity1));
+    EXPECT_FALSE(registry.HasComponent<Transform>(entity0));
+    EXPECT_TRUE(registry.HasComponent<A>(entity0));
+    EXPECT_EQ(registry.GetComponent<A>(entity0).Hello, a1.Hello);
+
+    EXPECT_FALSE(registry.HasComponent<Transform>(entity1));
+    EXPECT_FALSE(registry.HasComponent<B>(entity1));
+
+    EXPECT_EQ(registry.GetComponent<Transform>(entity2).Position, t3.Position);
+    EXPECT_EQ(registry.GetComponent<A>(entity2).Hello, a2.Hello);
+
+    EXPECT_EQ(registry.GetComponent<Transform>(entity3).Position, t4.Position);
+    EXPECT_EQ(registry.GetComponent<B>(entity3).s, b2.s);
+
+    EXPECT_EQ(registry.GetComponent<Transform>(entity4).Position, t5.Position);
+    EXPECT_EQ(registry.GetComponent<A>(entity4).Hello, a3.Hello);
+}
 }

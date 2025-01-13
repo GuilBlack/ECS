@@ -2,373 +2,404 @@
 
 #include "Types.h"
 #include "CircularBuffer.h"
-#include "BaseSystem.h"
-#include "ComponentList.h"
+#include "Archetype.h"
+#include "Exceptions.h"
 
-namespace ECS
+namespace ecs
 {
-    class EntityIDOutOfRange : public std::exception
+
+// could have just used virtual functions in the IComponentStorage class but I wanted to try this approach for fun
+using CreateStorageFunc = void(*)(Archetype*);
+using RemoveComponentFunc = bool(*)(Archetype*, EntityID);
+using MoveComponentFunc = void(*)(Archetype*, Archetype*, EntityID, EntityID);
+
+class EntityRegistry
+{
+public:
+    EntityRegistry()
+        : m_EntityCount(0)
+        , m_MaxEntityCount(4096)
+        , m_AvailableEntities(m_MaxEntityCount)
+        , m_EntitySignatures(m_MaxEntityCount)
     {
-    public:
-        EntityIDOutOfRange() 
-            : exception("EntityID is too big.") {}
-    };
+        Init();
+    }
 
-    class InvalidComponentTypeException : public std::exception
+    uint32_t GetEntityCount() const { return m_EntityCount; }
+    uint32_t GetMaxEntityCount() const { return m_MaxEntityCount; }
+
+    template<ComponentConstraint... Comps>
+    static void RegisterComponentTypes()
     {
-    public:
-        InvalidComponentTypeException()
-            : exception("The given component type doesn't exist as a storage!") {}
-    };
+        (RegisterComponentType<Comps>(), ...);
+    }
 
-    class EntityRegistry
+    template<ComponentConstraint Comp>
+    static void RegisterComponentType()
     {
-    public:
-        EntityRegistry()
-            : m_EntityCount(0)
-            , m_MaxEntityCount(4096)
-            , m_AvailableEntities(m_MaxEntityCount)
-            , m_Entities()
-            //, m_EntityEvents(256)
+        assert(GetComponentTypeIndex<Comp>() < 64 && "Too many components registered!");
+
+        s_CreateStorageFuncs[GetComponentTypeIndex<Comp>()] = &CreateStorage<Comp>;
+        s_RemoveComponentFuncs[GetComponentTypeIndex<Comp>()] = &RemoveComponent<Comp>;
+        s_MoveComponentFuncs[GetComponentTypeIndex<Comp>()] = &MoveComponent<Comp>;
+    }
+
+    EntityRegistry(uint32_t MaxEntityCount)
+        : m_MaxEntityCount(MaxEntityCount)
+    {
+        Init();
+    }
+
+    /// <summary>
+    /// Creates an entity with no components attached to it.
+    /// </summary>
+    /// <returns>the ID of an entity</returns>
+    const EntityID CreateEntity()
+    {
+        if (m_AvailableEntities.GetSize() == 0)
+            throw MaxEntityCountReached();
+        const EntityID entity = m_AvailableEntities.PopFront();
+        m_EntitySignatures[entity] = EntityMetadata{ EntitySignature(), GetArchetype(EntitySignature()) };
+        ++m_EntityCount;
+        return entity;
+    }
+
+    /// <summary>
+    /// Deletes an entity with its components.
+    /// </summary>
+    /// <param name="entity">: ID of the entity to be deleted</param>
+    void DeleteEntity(EntityID entity)
+    {
+        if (entity >= m_MaxEntityCount || m_EntitySignatures[entity].Archetype == nullptr)
+            return;
+        m_DeletedEntities.PushBack(entity);
+    }
+
+    bool IsEntityValid(EntityID entity)
+    {
+        return entity < m_MaxEntityCount && m_EntitySignatures[entity].Archetype != nullptr;
+    }
+
+    ///////////////////////////////////////////////////////////////////
+    //// Component operations /////////////////////////////////////////
+    ///////////////////////////////////////////////////////////////////
+
+    /// <summary>
+    /// Deletes a component of the specified component type that has been added to the specified entity.
+    /// </summary>
+    /// <typeparam name="Comp">: Type of the component to be deleted.</typeparam>
+    /// <param name="entity">: ID of the targeted entity</param>
+    template<ComponentConstraint Comp>
+    void DeleteComponent(EntityID entity)
+    {
+        m_DeletedComponents.PushBack({ entity, GetComponentTypeIndex<Comp>() });
+    }
+
+    /// <summary>
+    /// Adds a component that has already been created outside by you. Otherwise, use Emplace to create a new component that will be directly attached to the entity.
+    /// </summary>
+    /// <param name="entity">: ID of the entity that we want to modify</param>
+    /// <param name="component">: Component to be added to the list</param>
+    template<ComponentConstraint Comp>
+    bool TryAddComponent(EntityID entity, const Comp& component) noexcept
+    {
+        if (entity >= m_MaxEntityCount || m_EntitySignatures[entity].Archetype == nullptr)
+            return false;
+        ComponentTypeID compType = ComponentType<Comp>();
+        if ((m_EntitySignatures[entity].Signature & compType).any())
+            return false;
+
+        EntitySignature newSig = m_EntitySignatures[entity].Signature | compType;
+        m_EntitySignatures[entity].Signature = newSig;
+
+        Archetype* newArchetype = GetOrCreateArchetype(newSig);
+        MigrateEntity(entity, m_EntitySignatures[entity].Archetype, newArchetype);
+        newArchetype->AddComponent<Comp>(entity, component);
+        return true;
+    }
+
+    /// <summary>
+    /// Attaches a component of the specified type and constructed with the given arguments to an entity. If you have already constructed the component, use add component instead.
+    /// </summary>
+    /// <param name="entity">: ID of the entity that we want to modify</param>
+    /// <param name="...args">arguments used to construct the component</param>
+    /// <returns>the newly created component</returns>
+    template<ComponentConstraint Comp, IsConstructibleConstraint... Args>
+    Comp& EmplaceComponent(EntityID entity, Args&&... args)
+    {
+        if (entity >= m_MaxEntityCount || m_EntitySignatures[entity].Archetype == nullptr)
+            throw EntityIDOutOfRange();
+
+        ComponentTypeID compType = ComponentType<Comp>();
+        if ((m_EntitySignatures[entity].Signature & compType).any())
+            throw ComponentAlreadyExistsException();
+
+        EntitySignature newSig = m_EntitySignatures[entity].Signature | compType;
+        m_EntitySignatures[entity].Signature = newSig;
+
+        Archetype* newArchetype = GetOrCreateArchetype(newSig);
+        MigrateEntity(entity, m_EntitySignatures[entity].Archetype, newArchetype);
+        return newArchetype->EmplaceComponent<Comp>(entity, std::forward<args>()...);
+    }
+
+    /// <summary>
+    /// Replaces the component of the specified type of the given entity.
+    /// </summary>
+    /// <param name="entity">: ID of the entity that we want to modify</param>
+    /// <param name="component">: New Component that will replace the current one</param>
+    template<ComponentConstraint Comp>
+    bool TryReplaceComponent(EntityID entity, const Comp& component)
+    {
+        if (entity >= m_MaxEntityCount || m_EntitySignatures[entity].Archetype == nullptr)
+            return false;
+
+        if (!m_EntitySignatures[entity].Signature.test(GetComponentTypeIndex<Comp>()))
+            return false;
+
+        Comp& comp = GetComponent<Comp>(entity);
+        comp = component;
+        return true;
+    }
+
+    /// <summary>
+    /// Checks if the given entity has a component of the specified type.
+    /// </summary>
+    /// <typeparam name="Comp">: Type of the component that we want to check</typeparam>
+    /// <param name="entity">: ID of the entity that we want to modify</param>
+    /// <returns>a boolean that's true if the component has been found, false otherwise</returns>
+    template<ComponentConstraint Comp>
+    [[nodiscard]] inline bool HasComponent(EntityID entity)
+    {
+        if (entity >= m_MaxEntityCount)
+            throw EntityIDOutOfRange();
+
+        return m_EntitySignatures[entity].Signature.test(GetComponentTypeIndex<Comp>());
+    }
+
+    /// <summary>
+    /// Checks if the given entity has components of the specified types.
+    /// </summary>
+    /// <typeparam name="...Comps">: Types of the components that we want to check</typeparam>
+    /// <param name="entity">: ID of the entity that we want to modify</param>
+    /// <returns>a boolean that's true if the components have been found, false otherwise</returns>
+    template<ComponentConstraint... Comps>
+    [[nodiscard]] inline bool HasComponents(EntityID entity)
+    {
+        return (HasComponent<Comps>(entity) && ...);
+    }
+
+    template<ComponentConstraint Comp>
+    [[nodiscard]] inline Comp& TryGetComponent(EntityID entity, bool& isValid)
+    {
+        static Comp outComp;
+        if (entity >= m_MaxEntityCount || m_EntitySignatures[entity].Archetype == nullptr)
+            throw EntityIDOutOfRange();
+
+        if (m_EntitySignatures[entity].Signature.test(GetComponentTypeIndex<Comp>()))
         {
-            Init();
+            outComp = Comp{};
+            isValid = false;
         }
 
-        EntityRegistry(uint32_t MaxEntityCount)
-            : m_MaxEntityCount(MaxEntityCount)
+        isValid = true;
+        return m_EntitySignatures[entity].Archetype->GetComponent<Comp>(entity);
+    }
+
+    template<ComponentConstraint Comp>
+    [[nodiscard]] inline Comp& GetComponent(EntityID entity)
+    {
+        if (entity >= m_MaxEntityCount || m_EntitySignatures[entity].Archetype == nullptr)
+            throw EntityIDOutOfRange();
+        if (!m_EntitySignatures[entity].Signature.test(GetComponentTypeIndex<Comp>()))
+            throw NoComponentException();
+
+        return m_EntitySignatures[entity].Archetype->GetComponent<Comp>(entity);
+    }
+
+    template<ComponentConstraint... Comps>
+    [[nodiscard]] inline std::tuple<Comps&...> GetComponents(EntityID entity)
+    {
+        return { GetComponent<Comps>(entity)... };
+    }
+
+    void Flush()
+    {
+        for (int i = m_DeletedComponents.GetSize() - 1; i >= 0; --i)
         {
-            Init();
+            auto entityComp = m_DeletedComponents.PopFront();
+            DeleteComponent_Internal(entityComp.first, entityComp.second);
         }
-
-        /// <summary>
-        /// Should only be done once for any types of storage.
-        /// </summary>
-        /// <typeparam name="...Storage">: The different component types that we want to initialize its lists.</typeparam>
-        template<ComponentConstraint... Storage>
-        void CreateComponentStorage()
+        for (int i = m_DeletedEntities.GetSize() - 1; i >= 0; --i)
         {
-            (CreateComponentList<Storage>(), ...);
+            EntityID entity = m_DeletedEntities.PopFront();
+            DeleteEntity_Internal(entity);
         }
+    }
 
-        /// <summary>
-        /// Creates an entity with no components attached to it.
-        /// </summary>
-        /// <returns>the ID of an entity</returns>
-        const EntityID CreateEntity()
-        {
-            const EntityID entity = m_AvailableEntities.PopFront();
-            m_Entities.emplace_back(entity);
-            m_EntitiesSignature[entity] = SignatureEntityPair{ EntitySignature(), uint32_t(m_Entities.size()) - 1 };
-            ++m_EntityCount;
-            return entity;
-        }
+private:
+    uint32_t m_EntityCount = 0;
+    uint32_t m_MaxEntityCount = 4096;
 
-        /// <summary>
-        /// Deletes an entity with its components.
-        /// </summary>
-        /// <param name="entity">: ID of the entity to be deleted</param>
-        void DeleteEntity(EntityID entity)
-        {
-            if (entity > m_MaxEntityCount)
-                throw EntityIDOutOfRange();
-            if (!m_EntitiesSignature.contains(entity))
-                return;
+    //enum class EntityEventType
+    //{
+    //    EntityCreated,
+    //    EntityDeleted,
+    //    ComponentAdded,
+    //    ComponentRemoved
+    //};
 
-            for (auto[_, system] : m_Systems)
-            {
-                if (!((system->GetAcceptableSignature() & m_EntitiesSignature[entity].Signature) == system->GetAcceptableSignature()))
-                    continue;
-                system->RemoveEntity(entity);
-            }
+    //struct EntityEvent
+    //{
+    //    EntityEventType Type;
+    //    EntityID Entity;
+    //    ComponentTypeID ComponentType;
+    //};
 
-            std::size_t count = m_EntitiesSignature[entity].Signature.count();
-            uint32_t i = -1;
-
-            while (count > 0)
-            {
-                if (!m_EntitiesSignature[entity].Signature[++i])
-                    continue;
-                ComponentTypeID componentType;
-                componentType.set(i);
-                m_ComponentsLists[componentType]->Remove(entity);
-                --count;
-            }
-
-            --m_EntityCount;
-            EntityID lastEntity = m_Entities.back();
-            uint32_t entityIndex = m_EntitiesSignature[entity].Index;
-            m_Entities[entityIndex] = lastEntity;
-            m_Entities.pop_back();
-            m_EntitiesSignature[lastEntity].Index = entityIndex;
-            m_EntitiesSignature.erase(entity);
-            m_AvailableEntities.PushBack(entity);
-        }
-
-    public:
-        ///////////////////////////////////////////////////////////////////
-        //// System operations ////////////////////////////////////////////
-        ///////////////////////////////////////////////////////////////////
-
-        template<SystemConstraint T>
-        std::shared_ptr<T> CreateSystem()
-        {
-            assert(!m_Systems.contains(SystemType<T>()) && "You've already registered a system");
-            std::shared_ptr<T> system = std::make_shared<T>();
-            m_Systems.emplace({ SystemType<T>(), system });
-            m_Systems[SystemType<T>()]->OnAttach();
-
-            return system;
-        }
-
-        template<SystemConstraint T>
-        void RemoveSystem()
-        {
-            assert(m_Systems.contains(SystemType<T>()) && "You've already registered a system");
-            m_Systems[SystemType<T>()]->OnDetach();
-            m_Systems.erase(SystemType<T>());
-        }
-
-    public:
-        ///////////////////////////////////////////////////////////////////
-        //// Component operations /////////////////////////////////////////
-        ///////////////////////////////////////////////////////////////////
-
-        /// <summary>
-        /// Deletes a component of the specified component type that has been added to the specified entity.
-        /// </summary>
-        /// <typeparam name="Comp">: Type of the component to be deleted.</typeparam>
-        /// <param name="entity">: ID of the targeted entity</param>
-        template<ComponentConstraint Comp>
-        void DeleteComponent(EntityID entity)
-        {
-            ComponentTypeID compType = ComponentType<Comp>();
-        #ifdef _DEBUG
-            if (entity > m_MaxEntityCount)
-                throw EntityIDOutOfRange();
-            if (!m_ComponentsLists.contains(compType))
-                throw InvalidComponentTypeException();
-        #endif // _DEBUG
-
-            if (m_ComponentsLists[compType]->Remove(entity))
-            {
-                EntitySignature newSig = m_EntitiesSignature[entity].Signature & compType.flip();
-                for (auto [_, system] : m_Systems)
-                {
-                    const EntitySignature& sysSig = system->GetAcceptableSignature();
-                    if (((m_EntitiesSignature[entity].Signature & sysSig) == sysSig) && ((sysSig & newSig) != sysSig))
-                        system->RemoveEntity(entity);
-                }
-                m_EntitiesSignature[entity].Signature = newSig;
-            }
-        }
-
-        /// <summary>
-        /// Adds a component that has already been created outside by you. Otherwise, use Emplace to create a new component that will be directly attached to the entity.
-        /// </summary>
-        /// <param name="entity">: ID of the entity that we want to modify</param>
-        /// <param name="component">: Component to be added to the list</param>
-        template<ComponentConstraint Comp>
-        void AddComponent(EntityID entity, const Comp& component)
-        {
-            ComponentTypeID compType = ComponentType<Comp>();
-        #ifdef _DEBUG
-            if (!m_ComponentsLists.contains(compType))
-                throw InvalidComponentTypeException();
-        #endif // _DEBUG
-
-            std::shared_ptr<ComponentList<Comp>>& list = (std::shared_ptr<ComponentList<Comp>>&)m_ComponentsLists[compType];
-            list->Add(entity, component);
-            EntitySignature newSig = m_EntitiesSignature[entity].Signature | compType;
-            for (auto [_, system] : m_Systems)
-            {
-                const EntitySignature& sysSig = system->GetAcceptableSignature();
-                if (((m_EntitiesSignature[entity].Signature & sysSig) != sysSig) && ((sysSig & newSig) == sysSig))
-                    system->AddEntity(entity);
-            }
-            m_EntitiesSignature[entity].Signature = newSig;
-        }
-
-        /// <summary>
-        /// Attaches a component of the specified type and constructed with the given arguments to an entity. If you have already constructed the component, use add component instead.
-        /// </summary>
-        /// <param name="entity">: ID of the entity that we want to modify</param>
-        /// <param name="...args">arguments used to construct the component</param>
-        /// <returns>the newly created component</returns>
-        template<ComponentConstraint Comp, IsConstructibleConstraint... Args>
-        [[nodiscard]] Comp& EmplaceComponent(EntityID entity, Args&&... args)
-        {
-            ComponentTypeID compType = ComponentType<Comp>();
-        #ifdef _DEBUG
-            if (!m_ComponentsLists.contains(compType))
-                throw InvalidComponentTypeException();
-        #endif // _DEBUG
-
-            std::shared_ptr<ComponentList<Comp>>& list = (std::shared_ptr<ComponentList<Comp>>&)m_ComponentsLists[compType];
-            Comp& component = list->Emplace(entity, std::forward<Args>(args)...);
-            EntitySignature newSig = m_EntitiesSignature[entity].Signature | compType;
-            for (auto [_, system] : m_Systems)
-            {
-                const EntitySignature& sysSig = system->GetAcceptableSignature();
-                if (((m_EntitiesSignature[entity].Signature & sysSig) != sysSig) && ((sysSig & newSig) == sysSig))
-                    system->AddEntity(entity);
-            }
-            m_EntitiesSignature[entity].Signature |= compType;
-            return component;
-        }
-
-        /// <summary>
-        /// Replaces the component of the specified type of the given entity.
-        /// </summary>
-        /// <param name="entity">: ID of the entity that we want to modify</param>
-        /// <param name="component">: New Component that will replace the current one</param>
-        template<ComponentConstraint Comp>
-        void ReplaceComponent(EntityID entity, const Comp& component)
-        {
-        #ifdef _DEBUG
-            if (!m_ComponentsLists.contains(ComponentType<Comp>()))
-                throw InvalidComponentTypeException();
-        #endif // _DEBUG
-
-            std::shared_ptr<ComponentList<Comp>>& list = (std::shared_ptr<ComponentList<Comp>>&)m_ComponentsLists[ComponentType<Comp>()];
-            list->Replace(entity, component);
-        }
-
-        /// <summary>
-        /// Replaces the component of the specified type of the given entity.
-        /// </summary>
-        /// <param name="entity">: ID of the entity that we want to modify</param>
-        /// <param name="...args">: Arguments needed for the construction of the component</param>
-        /// <returns>the newly created component</returns>
-        template<ComponentConstraint Comp, IsConstructibleConstraint... Args>
-        [[nodiscard]] Comp& ReplaceComponent(EntityID entity, Args... args)
-        {
-            ComponentTypeID compType = ComponentType<Comp>();
-        #ifdef _DEBUG
-            if (!m_ComponentsLists.contains(compType))
-                throw InvalidComponentTypeException();
-        #endif
-
-            std::shared_ptr<ComponentList<Comp>>& list = (std::shared_ptr<ComponentList<Comp>>&)m_ComponentsLists[compType];
-            Comp& comp = list->Replace(entity, std::forward<Args>(args)...);
-            return comp;
-        }
-
-        /// <summary>
-        /// Checks if the given entity has a component of the specified type.
-        /// </summary>
-        /// <typeparam name="Comp">: Type of the component that we want to check</typeparam>
-        /// <param name="entity">: ID of the entity that we want to modify</param>
-        /// <returns>a boolean that's true if the component has been found, false otherwise</returns>
-        template<ComponentConstraint Comp>
-        [[nodiscard]] inline bool HasComponent(EntityID entity)
-        {
-        #ifdef _DEBUG
-            if (!m_ComponentsLists.contains(ComponentType<Comp>()))
-                throw InvalidComponentTypeException();
-        #endif // _DEBUG
-
-            std::shared_ptr<ComponentList<Comp>>& list = (std::shared_ptr<ComponentList<Comp>>&)m_ComponentsLists[ComponentType<Comp>()];
-            return list->HasComponent(entity);
-        }
-
-        /// <summary>
-        /// Checks if the given entity has components of the specified types.
-        /// </summary>
-        /// <typeparam name="...Comps">: Types of the components that we want to check</typeparam>
-        /// <param name="entity">: ID of the entity that we want to modify</param>
-        /// <returns>a boolean that's true if the components have been found, false otherwise</returns>
-        template<ComponentConstraint... Comps>
-        [[nodiscard]] inline bool HasComponents(EntityID entity)
-        {
-            return (HasComponent<Comps>(entity) && ...);
-        }
-
-        template<ComponentConstraint Comp>
-        [[nodiscard]] inline Comp& GetComponent(EntityID entity)
-        {
-        #ifdef _DEBUG
-            if (!m_ComponentsLists.contains(ComponentType<Comp>()))
-                throw InvalidComponentTypeException();
-        #endif // DEBUG
-
-            std::shared_ptr<ComponentList<Comp>>& list = (std::shared_ptr<ComponentList<Comp>>&)m_ComponentsLists[ComponentType<Comp>()];
-            return list->GetComponent(entity);
-        }
-
-        template<ComponentConstraint... Comps>
-        [[nodiscard]] inline std::tuple<Comps&...> GetComponents(EntityID entity)
-        {
-            return { GetComponent<Comps>(entity)... };
-        }
-
-        template<ComponentConstraint Comp>
-        [[nodiscard]] const std::shared_ptr<const ComponentList<Comp>>& View() const
-        {
-        #ifdef _DEBUG
-            if (!m_ComponentsLists.contains(ComponentType<Comp>()))
-                throw InvalidComponentTypeException();
-        #endif // DEBUG
-            return (std::shared_ptr<const ComponentList<Comp>>&)m_ComponentsLists.at(ComponentType<Comp>());
-        }
-
-    private:
-        uint32_t m_EntityCount = 0;
-        uint32_t m_MaxEntityCount = 5000;
-
-        struct SignatureEntityPair
-        {
-            EntitySignature Signature;
-            uint32_t Index = -1;
-        };
-
-        //enum class EntityEventType
-        //{
-        //    EntityCreated,
-        //    EntityDeleted,
-        //    ComponentAdded,
-        //    ComponentRemoved
-        //};
-
-        //struct EntityEvent
-        //{
-        //    EntityEventType Type;
-        //    EntityID Entity;
-        //    ComponentTypeID ComponentType;
-        //};
-
-        CircularBuffer<EntityID> m_AvailableEntities;
-        std::vector<EntityID> m_Entities;
-        //CircularBuffer<EntityEvent> m_EntityEvents;
-        std::unordered_map<EntityID, SignatureEntityPair> m_EntitiesSignature;
-        std::unordered_map<SystemTypeID, std::shared_ptr<BaseSystem>> m_Systems;
-        std::unordered_map<ComponentTypeID, std::shared_ptr<IComponentList>> m_ComponentsLists;
-
-    private:
-
-        /// <summary>
-        /// Initialization helper
-        /// </summary>
-        void Init()
-        {
-            m_EntitiesSignature.reserve(m_MaxEntityCount);
-            m_Entities.reserve(m_MaxEntityCount);
-            for (EntityID i = 0; i < m_MaxEntityCount; ++i)
-            {
-                m_AvailableEntities.PushBack(i);
-            }
-        }
-        
-        /// <summary>
-        /// Helper to create component list also known as `component storage` to the user.
-        /// </summary>
-        /// <typeparam name="T"></typeparam>
-        template<ComponentConstraint Comp>
-        inline void CreateComponentList()
-        {
-            ComponentTypeID compType = ComponentType<Comp>();
-            if (m_ComponentsLists.contains(compType))
-                return;
-            m_ComponentsLists[compType].reset(new ComponentList<Comp>(m_MaxEntityCount / 10));
-        }
+    CircularBuffer<EntityID> m_AvailableEntities;
+    struct EntityMetadata
+    {
+        EntitySignature Signature{};
+        Archetype*      Archetype{};
     };
+    std::vector<EntityMetadata> m_EntitySignatures;
+
+    std::unordered_map<EntitySignature, std::unique_ptr<Archetype>> m_Archetypes;
+    std::unordered_map<EntitySignature, std::vector<Archetype*>>    m_ArchetypeCache; // list of archetypes that has AT LEAST these components for looping through entities faster
+
+    CircularBuffer<EntityID> m_DeletedEntities;
+    CircularBuffer<std::pair<EntityID, ComponentTypeIndex>> m_DeletedComponents;
+
+private:
+    static inline std::array<CreateStorageFunc, MAX_COMPONENTS>    s_CreateStorageFuncs = {};
+    static inline std::array<MoveComponentFunc, MAX_COMPONENTS>    s_MoveComponentFuncs = {};
+    static inline std::array<RemoveComponentFunc, MAX_COMPONENTS>  s_RemoveComponentFuncs = {};
+
+private:
+
+    /// <summary>
+    /// Initialization helper
+    /// </summary>
+    void Init()
+    {
+        m_EntitySignatures.resize(m_MaxEntityCount);
+        for (EntityID i = 0; i < m_MaxEntityCount; ++i)
+        {
+            m_AvailableEntities.PushBack(i);
+        }
+
+        EntitySignature emptySig;
+        m_Archetypes[emptySig].reset(new Archetype());
+    }
+
+    Archetype* GetArchetype(EntitySignature signature)
+    {
+        if (m_Archetypes.contains(signature))
+            return m_Archetypes[signature].get();
+        return nullptr;
+    }
+
+    Archetype* GetOrCreateArchetype(EntitySignature signature)
+    {
+        if (m_Archetypes.contains(signature))
+            return m_Archetypes[signature].get();
+        Archetype* archetype = new Archetype();
+
+        for (uint32_t i = 0; i < MAX_COMPONENTS; ++i)
+        {
+            if (signature.test(i))
+            {
+                assert(s_CreateStorageFuncs[i] && "Component type not registered!");
+                s_CreateStorageFuncs[i](archetype);
+            }
+        }
+        m_Archetypes[signature].reset(archetype);
+
+        for (auto& [sig, archetypes] : m_ArchetypeCache)
+        {
+            if ((signature & sig) == sig)
+                archetypes.push_back(archetype);
+        }
+
+        return archetype;
+    }
+
+    void MigrateCommonComponents(
+        Archetype* srcArchetype, Archetype* dstArchetype, 
+        EntityID oldEntity, EntityID newEntity
+    )
+    {
+        for (auto& [compType, _] : srcArchetype->m_ComponentStorages)
+        {
+            if (!dstArchetype->m_ComponentStorages.contains(compType))
+                continue;
+            assert(s_MoveComponentFuncs[compType] && "Component type not registered!");
+            s_MoveComponentFuncs[compType](srcArchetype, dstArchetype, oldEntity, newEntity);
+        }
+    }
+
+    void MigrateEntity(EntityID entity, Archetype* srcArchetype, Archetype* dstArchetype)
+    {
+        dstArchetype->AddEntity(entity);
+
+        MigrateCommonComponents(srcArchetype, dstArchetype, entity, entity);
+
+        srcArchetype->RemoveEntity(entity);
+        m_EntitySignatures[entity].Archetype = dstArchetype;
+    }
+
+    void DeleteComponent_Internal(EntityID entity, ComponentTypeIndex compType)
+    {
+        if (entity >= m_MaxEntityCount || m_EntitySignatures[entity].Archetype == nullptr)
+            return;
+        assert(s_RemoveComponentFuncs[compType] && "Component type not registered!");
+        if (!s_RemoveComponentFuncs[compType](m_EntitySignatures[entity].Archetype, entity))
+            return;
+
+        ComponentTypeID compId = ComponentTypeID((uint64_t)1 << (uint32_t)compType);
+
+        EntitySignature newSig = m_EntitySignatures[entity].Signature & compId.flip();
+        m_EntitySignatures[entity].Signature = newSig;
+
+        Archetype* newArchetype = GetOrCreateArchetype(newSig);
+        MigrateEntity(entity, m_EntitySignatures[entity].Archetype, newArchetype);
+    }
+
+    void DeleteEntity_Internal(EntityID entity)
+    {
+        if (entity >= m_MaxEntityCount || m_EntitySignatures[entity].Archetype == nullptr)
+            return;
+
+        Archetype* archetype = m_EntitySignatures[entity].Archetype;
+        for (auto& [compType, _] : archetype->m_ComponentStorages)
+        {
+            assert(s_RemoveComponentFuncs[compType] && "Component type not registered!");
+            s_RemoveComponentFuncs[compType](archetype, entity);
+        }
+        archetype->RemoveEntity(entity);
+        m_EntitySignatures[entity].Archetype = nullptr;
+        m_EntitySignatures[entity].Signature = EntitySignature();
+        m_AvailableEntities.PushBack(entity);
+        --m_EntityCount;
+    }
+
+private:
+    template<ComponentConstraint Comp>
+    static void CreateStorage(Archetype* archetype)
+    {
+        archetype->CreateComponentStorage<Comp>();
+    }
+
+    template<ComponentConstraint Comp>
+    static void MoveComponent(Archetype* src, Archetype* dst, EntityID srcEntity, EntityID dstEntity)
+    {
+        dst->AddComponent<Comp>(dstEntity, src->GetComponent<Comp>(srcEntity));
+        src->RemoveComponent<Comp>(srcEntity);
+    }
+
+    template<ComponentConstraint Comp>
+    static bool RemoveComponent(Archetype* archetype, EntityID entity)
+    {
+        return archetype->RemoveComponent<Comp>(entity);
+    }
+};
 }

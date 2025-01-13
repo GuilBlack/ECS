@@ -2,7 +2,7 @@
 #include "Types.h"
 
 
-namespace ECS
+namespace ecs
 {
 
     // CirclularBuffer exception class
@@ -88,8 +88,7 @@ namespace ECS
         /// </summary>
         void PushBack(const T& item)
         {
-            try { CheckForResize(); }
-            catch (const CircularBufferException&) { throw; }
+            CheckForResize();
 
             m_Buffer[m_Tail] = item;
             m_Tail = (m_Tail + 1) % m_Capacity;
@@ -102,11 +101,10 @@ namespace ECS
         /// It will throw an exception if the capacity is equal to the max of the uint32 type.
         /// </summary>
         template<typename... Args>
-        requires IsConstructibleConstraint<T, Args...>
+            requires IsConstructibleConstraint<T, Args...>
         void PushBack(Args&&... args)
         {
-            try { CheckForResize(); }
-            catch (const CircularBufferException&) { throw; }
+            CheckForResize();
 
             m_Buffer[m_Tail] = T(std::forward<Args>(args)...);
             m_Tail = (m_Tail + 1) % m_Capacity;
@@ -120,8 +118,7 @@ namespace ECS
         /// </summary>
         void PushFront(const T& item)
         {
-            try { CheckForResize(); }
-            catch (const CircularBufferException&) { throw; }
+            CheckForResize();
 
             m_Head = (m_Head - 1 + m_Capacity) % m_Capacity;
             m_Buffer[m_Head] = item;
@@ -134,11 +131,10 @@ namespace ECS
         /// It will throw an exception if the capacity is equal to the max of the uint32 type.
         /// </summary>
         template<typename... Args>
-        requires IsConstructibleConstraint<T, Args...>
+            requires IsConstructibleConstraint<T, Args...>
         void PushFront(Args&&... args)
         {
-            try { CheckForResize(); }
-            catch (const CircularBufferException&) { throw; }
+            CheckForResize();
 
             m_Head = (m_Head - 1 + m_Capacity) % m_Capacity;
             m_Buffer[m_Head] = T(std::forward<Args>(args)...);
@@ -272,10 +268,10 @@ namespace ECS
                 }
             }
 
-            m_Capacity = newCapacity;
-            std::swap(m_Buffer, newBuffer);
-            delete[] newBuffer;
-            newBuffer = nullptr;
+            m_Capacity = newCapacity; 
+            T* oldBuffer = m_Buffer;
+            m_Buffer = newBuffer;
+            delete[] oldBuffer;
 
             m_Head = 0;
             m_Tail = m_Count % m_Capacity;
@@ -344,6 +340,36 @@ namespace ECS
 
         Iterator begin() noexcept { return Iterator(m_Buffer, 0, m_Head, m_Capacity); }
         Iterator end() noexcept { return Iterator(m_Buffer, m_Count, m_Head, m_Capacity); }
+
+        class ConstIterator
+        {
+        public:
+            ConstIterator(const T* buffer, uint32_t index, uint32_t head, uint32_t capacity) noexcept
+                : m_Buffer(buffer)
+                , m_Index(index)
+                , m_Head(head)
+                , m_Capacity(capacity)
+            {}
+
+            const T& operator*() const { return m_Buffer[(m_Head + m_Index) % m_Capacity]; }
+
+            const ConstIterator& operator++() noexcept
+            {
+                ++m_Index;
+                return *this;
+            }
+
+            bool operator!=(const ConstIterator& other) const noexcept { return m_Index != other.m_Index; }
+
+        private:
+            const T* m_Buffer;
+            uint32_t m_Index;
+            uint32_t m_Head;
+            uint32_t m_Capacity;
+        };
+
+        ConstIterator begin() const noexcept { return ConstIterator(m_Buffer, 0, m_Head, m_Capacity); }
+        ConstIterator end() const noexcept { return ConstIterator(m_Buffer, m_Count, m_Head, m_Capacity); }
     #pragma endregion
 
     #pragma region OperatorLogic
@@ -428,13 +454,13 @@ namespace ECS
             if (m_Capacity == std::numeric_limits<uint32_t>::max())
                 throw CircularBufferException("CircularBuffer is full and its capacity is at the limit");
 
-            if (m_Capacity > std::numeric_limits<uint32_t>::max() / 1.5)
+            if (m_Capacity > std::numeric_limits<uint32_t>::max() / 2)
             {
                 newCapacity = std::numeric_limits<uint32_t>::max();
             }
             else
             {
-                newCapacity = uint32_t(m_Capacity * 1.5);
+                newCapacity = uint32_t(m_Capacity * 2);
             }
             Resize(newCapacity);
         }

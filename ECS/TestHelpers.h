@@ -139,13 +139,3 @@ struct ComplexStruct
         return *this;
     }
 };
-
-class TestSystem : public ECS::BaseSystem
-{
-
-};
-
-class TestSystem2 : public ECS::BaseSystem
-{
-
-};

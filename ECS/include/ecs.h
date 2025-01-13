@@ -2,6 +2,5 @@
 
 #include "Types.h"
 #include "CircularBuffer.h"
-#include "BaseSystem.h"
-#include "ComponentList.h"
+#include "Archetype.h"
 #include "EntityRegistry.h"
