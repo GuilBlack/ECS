@@ -63,7 +63,8 @@ int main()
 
     // Get a view of entities that have at least these components
     // it WILL iterate faster than if you yourself try to iterate over 
-    // the entities via the registry
+    // the entities via the registry since there is no hash lookups.
+    // We are basically iterating over a contiguous array.
     // prefered way of looping over entities and takes 
     // The time to create the view is O(N) where N is the number
     // of Archetypes that have at least these components.
