@@ -1,19 +1,36 @@
 #pragma once
+#ifdef _DEBUG
+#undef _ITERATOR_DEBUG_LEVEL 0
+#endif
 #include <type_traits>
 #include <unordered_set>
-#include <concepts>
 #include <unordered_map>
-#include <memory>
-#include <vector>
-#include <cassert>
 #include <string>
+#include <array>
+#include <array>
+#ifdef _DEBUG
+#define _ITERATOR_DEBUG_LEVEL 2
+#endif
+#include <concepts>
+#include <memory>
+#include <cassert>
 #include <bitset>
 #include <utility>
 #include <algorithm>
 #include <stdexcept>
 #include <limits>
 #include <atomic>
-#include <array>
+
+
+#if defined(__clang__)
+#define ECS_FORCE_INLINE __attribute__((always_inline))
+#elif defined(__GNUC__) || defined(__GNUG__)
+#define ECS_FORCE_INLINE __attribute__((always_inline))
+#elif defined(_MSC_VER)
+#define ECS_FORCE_INLINE __forceinline
+#else
+#define ECS_FORCE_INLINE inline
+#endif
 
 namespace ecs
 {
@@ -46,12 +63,6 @@ inline static const ComponentTypeIndex CreateComponentTypeIndex()
     return typeCounter++;
 }
 
-inline static const SystemTypeID GetSystemTypeID()
-{
-    static SystemTypeID type = 0;
-    return type++;
-}
-
 template<ComponentConstraint T>
 inline ComponentTypeIndex GetComponentTypeIndex()
 {
@@ -64,12 +75,5 @@ inline const ComponentTypeID ComponentType()
 {
     static const ComponentTypeID compId = ComponentTypeID((uint64_t)1 << GetComponentTypeIndex<T>());
     return compId;
-}
-
-template<SystemConstraint T>
-inline const SystemTypeID SystemType()
-{
-    static const SystemTypeID systemType = GetSystemTypeID();
-    return systemType;
 }
 }

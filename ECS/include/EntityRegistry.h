@@ -7,7 +7,6 @@
 
 namespace ecs
 {
-
 // could have just used virtual functions in the IComponentStorage class but I wanted to try this approach for fun
 using CreateStorageFunc = void(*)(Archetype*);
 using RemoveComponentFunc = bool(*)(Archetype*, EntityID);
@@ -168,7 +167,7 @@ public:
     /// <param name="entity">: ID of the entity that we want to modify</param>
     /// <returns>a boolean that's true if the component has been found, false otherwise</returns>
     template<ComponentConstraint Comp>
-    [[nodiscard]] inline bool HasComponent(EntityID entity)
+    [[nodiscard]] ECS_FORCE_INLINE bool HasComponent(EntityID entity)
     {
         if (entity >= m_MaxEntityCount)
             throw EntityIDOutOfRange();
@@ -183,7 +182,7 @@ public:
     /// <param name="entity">: ID of the entity that we want to modify</param>
     /// <returns>a boolean that's true if the components have been found, false otherwise</returns>
     template<ComponentConstraint... Comps>
-    [[nodiscard]] inline bool HasComponents(EntityID entity)
+    [[nodiscard]] ECS_FORCE_INLINE bool HasComponents(EntityID entity)
     {
         return (HasComponent<Comps>(entity) && ...);
     }
@@ -206,7 +205,7 @@ public:
     }
 
     template<ComponentConstraint Comp>
-    [[nodiscard]] inline Comp& GetComponent(EntityID entity)
+    [[nodiscard]] ECS_FORCE_INLINE Comp& GetComponent(EntityID entity)
     {
         if (entity >= m_MaxEntityCount || m_EntitySignatures[entity].Archetype == nullptr)
             throw EntityIDOutOfRange();
@@ -217,9 +216,22 @@ public:
     }
 
     template<ComponentConstraint... Comps>
-    [[nodiscard]] inline std::tuple<Comps&...> GetComponents(EntityID entity)
+    [[nodiscard]] ECS_FORCE_INLINE std::tuple<Comps&...> GetComponents(EntityID entity)
     {
         return { GetComponent<Comps>(entity)... };
+    }
+    
+    template<ComponentConstraint... Comps>
+    [[nodiscard]] ComponentView<Comps...> GetView()
+    {
+        EntitySignature sig;
+        sig |= (ComponentType<Comps>() | ...);
+        if (!m_ArchetypeCache.contains(sig))
+             CreateArchetypeCache(sig);
+        auto it = m_Archetypes.find(sig);
+        if (it == m_Archetypes.end())
+            return ComponentView<Comps...>(std::span<Archetype*>());
+        return ComponentView<Comps...>(m_ArchetypeCache[sig]);
     }
 
     void Flush()
@@ -239,21 +251,6 @@ public:
 private:
     uint32_t m_EntityCount = 0;
     uint32_t m_MaxEntityCount = 4096;
-
-    //enum class EntityEventType
-    //{
-    //    EntityCreated,
-    //    EntityDeleted,
-    //    ComponentAdded,
-    //    ComponentRemoved
-    //};
-
-    //struct EntityEvent
-    //{
-    //    EntityEventType Type;
-    //    EntityID Entity;
-    //    ComponentTypeID ComponentType;
-    //};
 
     CircularBuffer<EntityID> m_AvailableEntities;
     struct EntityMetadata
@@ -380,6 +377,15 @@ private:
         m_EntitySignatures[entity].Signature = EntitySignature();
         m_AvailableEntities.PushBack(entity);
         --m_EntityCount;
+    }
+
+    void CreateArchetypeCache(EntitySignature cacheSig)
+    {
+        for (const auto&[sig, archetype] : m_Archetypes)
+        {
+            if ((cacheSig & sig) == cacheSig)
+                m_ArchetypeCache[cacheSig].push_back(archetype.get());
+        }
     }
 
 private:

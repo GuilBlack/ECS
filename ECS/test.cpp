@@ -1,6 +1,6 @@
 #include "pch.h"
 #include "TestHelpers.h"
-#define CIRCULAR_BUFFER_STRESS_TEST 0
+//#define CIRCULAR_BUFFER_STRESS_TEST
 
 namespace ECSTests
 {
@@ -805,4 +805,45 @@ TEST_F(EntityRegistryTest, VerifyStateAfterComplexOperations) {
     EXPECT_EQ(registry.GetComponent<Transform>(entity4).Position, t5.Position);
     EXPECT_EQ(registry.GetComponent<A>(entity4).Hello, a3.Hello);
 }
+
+TEST_F(EntityRegistryTest, ComponentViewTest)
+{
+    ecs::EntityRegistry registry;
+    Transform t[5];
+    t[0] = { {1.0f, 2.0f, 3.0f}, {0,0,0}, {1,1,1}  };
+    t[1] = { {4.0f, 5.0f, 6.0f}, {0,0,0}, {1,1,1}  };
+    t[2] = { {7.0f, 8.0f, 9.0f}, {0,0,0}, {1,1,1}  };
+    t[3] = { {10.0f, 11.0f, 12.0f}, {0,0,0}, {1,1,1}  };
+    t[4] = { {13.0f, 14.0f, 15.0f}, {0,0,0}, {1,1,1}  };
+    A a1{ 42 };
+    A a2{ 84 };
+    A a3{ 126 };
+    B b1{ "S1" };
+    B b2{ "S2" };
+
+    EntityID entity0 = registry.CreateEntity();
+    EntityID entity1 = registry.CreateEntity();
+    EntityID entity2 = registry.CreateEntity();
+    EntityID entity3 = registry.CreateEntity();
+    EntityID entity4 = registry.CreateEntity();
+
+    registry.TryAddComponent(entity0, t[0]);
+    registry.TryAddComponent(entity0, a1);
+    registry.TryAddComponent(entity1, t[1]);
+    registry.TryAddComponent(entity1, b1);
+    registry.TryAddComponent(entity2, t[2]);
+    registry.TryAddComponent(entity2, a2);
+    registry.TryAddComponent(entity3, t[3]);
+    registry.TryAddComponent(entity3, b2);
+    registry.TryAddComponent(entity4, t[4]);
+    registry.TryAddComponent(entity4, a3);
+
+    auto view = registry.GetView<Transform>();
+    for (auto index : view)
+    {
+        auto[transform] = view.Get(index);
+        EXPECT_EQ(transform.Position, t[index.Entity].Position);
+    }
+}
+
 }
