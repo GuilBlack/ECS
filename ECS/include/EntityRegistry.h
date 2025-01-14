@@ -56,7 +56,7 @@ public:
     const EntityID CreateEntity()
     {
         if (m_AvailableEntities.GetSize() == 0)
-            throw MaxEntityCountReached();
+            Resize();
         const EntityID entity = m_AvailableEntities.PopFront();
         m_EntitySignatures[entity] = EntityMetadata{ EntitySignature(), GetArchetype(EntitySignature()) };
         ++m_EntityCount;
@@ -406,6 +406,17 @@ private:
     static bool RemoveComponent(Archetype* archetype, EntityID entity)
     {
         return archetype->RemoveComponent<Comp>(entity);
+    }
+
+    void Resize()
+    {
+        m_MaxEntityCount *= 2;
+        m_AvailableEntities.Resize(m_MaxEntityCount);
+        m_EntitySignatures.resize(m_MaxEntityCount);
+        for (EntityID i = m_MaxEntityCount / 2; i < m_MaxEntityCount; ++i)
+        {
+            m_AvailableEntities.PushBack(i);
+        }        
     }
 };
 }

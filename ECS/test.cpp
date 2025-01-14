@@ -6,332 +6,335 @@ namespace ECSTests
 {
 using namespace ecs;
 
-    TEST(TypeTests, ComponentTypeTest)
+TEST(TypeTests, ComponentTypeTest)
+{
+    ComponentTypeID transformType = ComponentType<Transform>();
+    ComponentTypeID aType = ComponentType<A>();
+    ComponentTypeID bType = ComponentType<B>();
+    EXPECT_EQ(aType, ComponentType<A>());
+    EXPECT_EQ(bType, ComponentType<B>());
+    EXPECT_EQ(transformType, ComponentType<Transform>());
+}
+
+////////////////////////////////////////////////////////////////////////////////////////
+// CircularBuffer Tests ////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////
+
+TEST(CircularBufferTests, CreateCircularBuffer)
+{
+    CircularBuffer<int> buffer;
+
+    EXPECT_EQ(buffer.GetCapacity(), 16);
+
+    CircularBuffer<int> customBuffer(10);
+    EXPECT_EQ(customBuffer.GetCapacity(), 10);
+}
+
+TEST(CircularBufferTests, CircularBufferCount)
+{
+    CircularBuffer<int> buffer(3);
+
+    EXPECT_EQ(buffer.GetSize(), 0);
+    EXPECT_NE(buffer.IsEmpty(), false);
+    EXPECT_EQ(buffer.IsEmpty(), true);
+    EXPECT_EQ(buffer.IsFull(), false);
+
+    buffer.PushBack(1);
+    buffer.PushBack(2);
+    buffer.PushBack(3);
+
+    EXPECT_EQ(buffer.GetSize(), 3);
+    EXPECT_EQ(buffer.IsEmpty(), false);
+    EXPECT_EQ(buffer.IsFull(), true);
+}
+
+TEST(CircularBufferTests, CircularBufferCreationStressTest)
+{
+    CircularBuffer<int> buffer(10000);
+
+    EXPECT_EQ(buffer.GetCapacity(), 10000);
+    EXPECT_EQ(buffer.GetSize(), 0);
+    EXPECT_EQ(buffer.IsEmpty(), true);
+
+    for (int i = 0; i < 10000; i++)
     {
-        ComponentTypeID transformType = ComponentType<Transform>();
-        ComponentTypeID aType = ComponentType<A>();
-        ComponentTypeID bType = ComponentType<B>();
-        EXPECT_EQ(aType, ComponentType<A>());
-        EXPECT_EQ(bType, ComponentType<B>());
-        EXPECT_EQ(transformType, ComponentType<Transform>());
+        buffer.PushBack(i);
     }
 
-    ////////////////////////////////////////////////////////////////////////////////////////
-    // CircularBuffer Tests ////////////////////////////////////////////////////////////////
-    ////////////////////////////////////////////////////////////////////////////////////////
+    EXPECT_EQ(buffer.GetCapacity(), 10000);
+    EXPECT_EQ(buffer.GetSize(), 10000);
+    EXPECT_EQ(buffer.IsEmpty(), false);
+}
 
-    TEST(CircularBufferTests, CreateCircularBuffer)
+TEST(CircularBufferTests, CircularBufferAccessors)
+{
+    CircularBuffer<int> buffer(3);
+
+    buffer.PushBack(1);
+    buffer.PushBack(2);
+    buffer.PushBack(3);
+
+    EXPECT_EQ(buffer.GetFront(), 1);
+    EXPECT_EQ(buffer.GetBack(), 3);
+    EXPECT_EQ(buffer[0], 1);
+    EXPECT_EQ(buffer[1], 2);
+    EXPECT_EQ(buffer[2], 3);
+}
+
+TEST(CircularBufferTests, CircularBufferResize)
+{
+    CircularBuffer<int> buffer(3);
+    EXPECT_EQ(buffer.GetCapacity(), 3);
+    for (int i = 0; i < 3; ++i)
+        buffer.PushBack(i);
+    EXPECT_EQ(buffer.GetSize(), 3);
+    buffer.Resize(6);
+    EXPECT_EQ(buffer.GetCapacity(), 6);
+    for (int i = 0; i < 3; ++i)
     {
-        CircularBuffer<int> buffer;
-
-        EXPECT_EQ(buffer.GetCapacity(), 16);
-
-        CircularBuffer<int> customBuffer(10);
-        EXPECT_EQ(customBuffer.GetCapacity(), 10);
+        auto num = buffer.PopFront();
+        EXPECT_EQ(num, i);
     }
-
-    TEST(CircularBufferTests, CircularBufferCount)
+    EXPECT_EQ(buffer.GetSize(), 0);
+    for (int i = 0; i < 6; ++i)
+        buffer.PushFront(i);
+    EXPECT_EQ(buffer.GetSize(), 6);
+    EXPECT_EQ(buffer.GetCapacity(), 6);
+    buffer.PushBack(6);
+    EXPECT_EQ(buffer.GetCapacity(), uint32_t(6 * 2));
+    EXPECT_EQ(buffer.GetSize(), 7);
+    buffer.Resize(7U);
+    EXPECT_EQ(buffer.GetCapacity(), 7U);
+    auto num = buffer.PopBack();
+    EXPECT_EQ(num, 6);
+    EXPECT_EQ(buffer.GetSize(), 6); 
+    for (int i = 0; i < 6; ++i)
     {
-        CircularBuffer<int> buffer(3);
-
-        EXPECT_EQ(buffer.GetSize(), 0);
-        EXPECT_NE(buffer.IsEmpty(), false);
-        EXPECT_EQ(buffer.IsEmpty(), true);
-        EXPECT_EQ(buffer.IsFull(), false);
-
-        buffer.PushBack(1);
-        buffer.PushBack(2);
-        buffer.PushBack(3);
-
-        EXPECT_EQ(buffer.GetSize(), 3);
-        EXPECT_EQ(buffer.IsEmpty(), false);
-        EXPECT_EQ(buffer.IsFull(), true);
-    }
-
-    TEST(CircularBufferTests, CircularBufferCreationStressTest)
-    {
-        CircularBuffer<int> buffer(10000);
-
-        EXPECT_EQ(buffer.GetCapacity(), 10000);
-        EXPECT_EQ(buffer.GetSize(), 0);
-        EXPECT_EQ(buffer.IsEmpty(), true);
-
-        for (int i = 0; i < 10000; i++)
-        {
-            buffer.PushBack(i);
-        }
-
-        EXPECT_EQ(buffer.GetCapacity(), 10000);
-        EXPECT_EQ(buffer.GetSize(), 10000);
-        EXPECT_EQ(buffer.IsEmpty(), false);
-    }
-
-    TEST(CircularBufferTests, CircularBufferAccessors)
-    {
-        CircularBuffer<int> buffer(3);
-
-        buffer.PushBack(1);
-        buffer.PushBack(2);
-        buffer.PushBack(3);
-
-        EXPECT_EQ(buffer.GetFront(), 1);
-        EXPECT_EQ(buffer.GetBack(), 3);
-        EXPECT_EQ(buffer[0], 1);
-        EXPECT_EQ(buffer[1], 2);
-        EXPECT_EQ(buffer[2], 3);
-    }
-
-    TEST(CircularBufferTests, CircularBufferResize)
-    {
-        CircularBuffer<int> buffer(3);
-        EXPECT_EQ(buffer.GetCapacity(), 3);
-        for (int i = 0; i < 3; ++i)
-            buffer.PushBack(i);
-        EXPECT_EQ(buffer.GetSize(), 3);
-        buffer.Resize(6);
-        EXPECT_EQ(buffer.GetCapacity(), 6);
-        for (int i = 0; i < 3; ++i)
-        {
-            auto num = buffer.PopFront();
-            EXPECT_EQ(num, i);
-        }
-        EXPECT_EQ(buffer.GetSize(), 0);
-        for (int i = 0; i < 6; ++i)
-            buffer.PushFront(i);
-        EXPECT_EQ(buffer.GetSize(), 6);
-        EXPECT_EQ(buffer.GetCapacity(), 6);
-        buffer.PushBack(6);
-        EXPECT_EQ(buffer.GetCapacity(), uint32_t(6 * 2));
-        EXPECT_EQ(buffer.GetSize(), 7);
-        buffer.Resize(7U);
-        EXPECT_EQ(buffer.GetCapacity(), 7U);
         auto num = buffer.PopBack();
-        EXPECT_EQ(num, 6);
-        EXPECT_EQ(buffer.GetSize(), 6);
-        for (int i = 0; i < 6; ++i)
-        {
-            auto num = buffer.PopBack();
-            EXPECT_EQ(num, i);
-        }
-        EXPECT_EQ(buffer.GetSize(), 0);
-        EXPECT_EQ(buffer.GetCapacity(), 7U);
+        EXPECT_EQ(num, i);
     }
+    EXPECT_EQ(buffer.GetSize(), 0);
+    EXPECT_EQ(buffer.GetCapacity(), 7U);
+    buffer.Resize(30);
+    EXPECT_EQ(buffer.GetCapacity(), 30);
+    EXPECT_EQ(buffer.GetSize(), 0);
+}
 
-    TEST(CircularBufferTests, CircularBufferComplexStructTest)
+TEST(CircularBufferTests, CircularBufferComplexStructTest)
+{
+    CircularBuffer<ComplexStruct> buffer(3);
+
+    EXPECT_EQ(buffer.GetCapacity(), 3);
+    EXPECT_EQ(buffer.GetSize(), 0);
+    EXPECT_EQ(buffer.IsEmpty(), true);
+
+    for (int i = 0; i < 5; ++i)
+        buffer.PushBack(6, new char[6] { 'h', 'e', 'l', 'l', 'o', '\0' });
+
+    EXPECT_EQ(buffer.GetSize(), 5);
+
+    CircularBuffer<ComplexStruct> buffer2 = buffer;
+    EXPECT_EQ(buffer2.GetSize(), 5);
+    EXPECT_EQ(buffer2.GetCapacity(), buffer.GetCapacity());
+    for (int i = 0; i < 2; ++i)
     {
-        CircularBuffer<ComplexStruct> buffer(3);
-
-        EXPECT_EQ(buffer.GetCapacity(), 3);
-        EXPECT_EQ(buffer.GetSize(), 0);
-        EXPECT_EQ(buffer.IsEmpty(), true);
-
-        for (int i = 0; i < 5; ++i)
-            buffer.PushBack(6, new char[6] { 'h', 'e', 'l', 'l', 'o', '\0' });
-
-        EXPECT_EQ(buffer.GetSize(), 5);
-
-        CircularBuffer<ComplexStruct> buffer2 = buffer;
-        EXPECT_EQ(buffer2.GetSize(), 5);
-        EXPECT_EQ(buffer2.GetCapacity(), buffer.GetCapacity());
-        for (int i = 0; i < 2; ++i)
-        {
-            auto complexStruct = buffer2.PopFront();
-            EXPECT_EQ(complexStruct.num, 6);
-            EXPECT_STRCASEEQ("hello", complexStruct.characters);
-        }
-        EXPECT_EQ(buffer2.GetSize(), 3);
-        for (int i = 0; i < 2; ++i)
-            buffer2.PushBack(ComplexStruct(6, new char[6] { 'w', 'o', 'r', 'l', 'd', '\0' }));
-
-        CircularBuffer<ComplexStruct> buffer3 = buffer2;
-        EXPECT_EQ(buffer3.GetSize(), 5);
-        EXPECT_EQ(buffer3.GetCapacity(), buffer2.GetCapacity());
-        for (int i = 0; i < 5; ++i)
-        {
-            auto complexStruct = buffer3.PopFront();
-            EXPECT_EQ(complexStruct.num, 6);
-            if (i < 3)
-            {
-                EXPECT_STRCASEEQ("hello", complexStruct.characters);
-                continue;
-            }
-            EXPECT_STRCASEEQ("world", complexStruct.characters);
-        }
-
-        for (auto& complexStruct : buffer)
-        {
-            EXPECT_EQ(complexStruct.num, 6);
-            EXPECT_STRCASEEQ("hello", complexStruct.characters);
-            buffer.PopFront();
-        }
-        EXPECT_EQ(buffer.GetSize(), 0);
-        EXPECT_EQ(buffer2.GetSize(), 5);
-        EXPECT_EQ(buffer3.GetSize(), 0);
-        EXPECT_EQ(buffer2.GetCapacity(), buffer.GetCapacity());
-        EXPECT_EQ(buffer3.GetCapacity(), buffer2.GetCapacity());
+        auto complexStruct = buffer2.PopFront();
+        EXPECT_EQ(complexStruct.num, 6);
+        EXPECT_STRCASEEQ("hello", complexStruct.characters);
     }
+    EXPECT_EQ(buffer2.GetSize(), 3);
+    for (int i = 0; i < 2; ++i)
+        buffer2.PushBack(ComplexStruct(6, new char[6] { 'w', 'o', 'r', 'l', 'd', '\0' }));
+
+    CircularBuffer<ComplexStruct> buffer3 = buffer2;
+    EXPECT_EQ(buffer3.GetSize(), 5);
+    EXPECT_EQ(buffer3.GetCapacity(), buffer2.GetCapacity());
+    for (int i = 0; i < 5; ++i)
+    {
+        auto complexStruct = buffer3.PopFront();
+        EXPECT_EQ(complexStruct.num, 6);
+        if (i < 3)
+        {
+            EXPECT_STRCASEEQ("hello", complexStruct.characters);
+            continue;
+        }
+        EXPECT_STRCASEEQ("world", complexStruct.characters);
+    }
+
+    for (auto& complexStruct : buffer)
+    {
+        EXPECT_EQ(complexStruct.num, 6);
+        EXPECT_STRCASEEQ("hello", complexStruct.characters);
+        buffer.PopFront();
+    }
+    EXPECT_EQ(buffer.GetSize(), 0);
+    EXPECT_EQ(buffer2.GetSize(), 5);
+    EXPECT_EQ(buffer3.GetSize(), 0);
+    EXPECT_EQ(buffer2.GetCapacity(), buffer.GetCapacity());
+    EXPECT_EQ(buffer3.GetCapacity(), buffer2.GetCapacity());
+}
 
 #ifdef CIRCULAR_BUFFER_STRESS_TEST
-    TEST(CircularBufferTests, CircularBufferStressResize)
-    {
-        CircularBuffer<uint8_t> buffer(uint32_t(std::numeric_limits<uint32_t>::max() / 2));
-        EXPECT_EQ(buffer.GetCapacity(), uint32_t(std::numeric_limits<uint32_t>::max() / 2));
-        for (uint32_t i = 0; i < uint32_t(std::numeric_limits<uint32_t>::max() / 2); ++i)
-            buffer.PushBack(uint8_t(i) % std::numeric_limits<uint8_t>::max());
-        EXPECT_EQ(buffer.GetSize(), uint32_t(std::numeric_limits<uint32_t>::max() / 2));
-        EXPECT_EQ(buffer.GetCapacity(), uint32_t((std::numeric_limits<uint32_t>::max() / 2)));
-        buffer.PushBack(1);
-        EXPECT_EQ(buffer.GetCapacity(), uint32_t((std::numeric_limits<uint32_t>::max() / 2) * 2));
-    }
+TEST(CircularBufferTests, CircularBufferStressResize)
+{
+    CircularBuffer<uint8_t> buffer(uint32_t(std::numeric_limits<uint32_t>::max() / 2));
+    EXPECT_EQ(buffer.GetCapacity(), uint32_t(std::numeric_limits<uint32_t>::max() / 2));
+    for (uint32_t i = 0; i < uint32_t(std::numeric_limits<uint32_t>::max() / 2); ++i)
+        buffer.PushBack(uint8_t(i) % std::numeric_limits<uint8_t>::max());
+    EXPECT_EQ(buffer.GetSize(), uint32_t(std::numeric_limits<uint32_t>::max() / 2));
+    EXPECT_EQ(buffer.GetCapacity(), uint32_t((std::numeric_limits<uint32_t>::max() / 2)));
+    buffer.PushBack(1);
+    EXPECT_EQ(buffer.GetCapacity(), uint32_t((std::numeric_limits<uint32_t>::max() / 2) * 2));
+}
 #endif // CIRCULAR_BUFFER_STRESS_TEST
 
-    ////////////////////////////////////////////////////////////////////////////////////////
-    // Archetype Tests /////////////////////////////////////////////////////////////////////
-    ////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////
+// Archetype Tests /////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////
 
-    class ArchetypeTest : public ::testing::Test
+class ArchetypeTest : public ::testing::Test
+{
+protected:
+    void SetUp() override
     {
-    protected:
-        void SetUp() override
-        {
-            archetype = new ecs::Archetype();
-        }
-
-        void TearDown() override
-        {
-            delete archetype;
-        }
-
-        ecs::Archetype* archetype{nullptr};
-    };
-
-    TEST_F(ArchetypeTest, AddEntityTest)
-    {
-        EntityID e1 = 1;
-        archetype->AddEntity(e1);
-
-        const auto& entities = archetype->GetEntities();
-        ASSERT_EQ(entities.size(), 1);
-        EXPECT_EQ(entities[0], e1);
+        archetype = new ecs::Archetype();
     }
 
-    TEST_F(ArchetypeTest, RemoveEntityTest)
+    void TearDown() override
     {
-        EntityID e1 = 1;
-        EntityID e2 = 2;
-        EntityID e3 = 3;
-
-        archetype->AddEntity(e1);
-        archetype->AddEntity(e2);
-        archetype->AddEntity(e3);
-        archetype->RemoveEntity(e2);
-
-        const auto& entities = archetype->GetEntities();
-        ASSERT_EQ(entities.size(), 2);
-        EXPECT_EQ(entities[0], e1);
-        EXPECT_NE(entities[1], e2);
-        EXPECT_EQ(entities[1], e3);
-        archetype->AddEntity(e2);
-        ASSERT_EQ(entities.size(), 3);
-        EXPECT_EQ(entities[2], e2);
-        archetype->RemoveEntity(e1);
-        ASSERT_EQ(entities.size(), 2);
-        EXPECT_NE(entities[0], e1);
-        EXPECT_EQ(entities[0], e2);
-
-        EXPECT_FALSE(archetype->HasEntity(e1));
-        EXPECT_TRUE(archetype->HasEntity(e2));
-        EXPECT_TRUE(archetype->HasEntity(e3));
+        delete archetype;
     }
 
-    TEST_F(ArchetypeTest, CreateAndAddComponentTest)
-    {
-        EntityID e1 = 1;
-        archetype->CreateComponentStorages<Transform, A>();
+    ecs::Archetype* archetype{nullptr};
+};
 
-        archetype->AddEntity(e1);
-        archetype->AddComponents<Transform, A>(e1, Transform({ 1, 2, 3 }, { 4, 5, 6 }, { 7, 8, 9 }), A(42));
+TEST_F(ArchetypeTest, AddEntityTest)
+{
+    EntityID e1 = 1;
+    archetype->AddEntity(e1);
 
-        auto& transformStorage = archetype->GetComponentStorage<Transform>();
-        auto& aStorage = archetype->GetComponentStorage<A>();
+    const auto& entities = archetype->GetEntities();
+    ASSERT_EQ(entities.size(), 1);
+    EXPECT_EQ(entities[0], e1);
+}
 
-        ASSERT_EQ(transformStorage.Components.size(), 1);
-        ASSERT_EQ(aStorage.Components.size(), 1);
+TEST_F(ArchetypeTest, RemoveEntityTest)
+{
+    EntityID e1 = 1;
+    EntityID e2 = 2;
+    EntityID e3 = 3;
 
-        EXPECT_EQ(transformStorage.Components[0], Transform({ 1, 2, 3 }, { 4, 5, 6 }, { 7, 8, 9 }));
-        EXPECT_EQ(aStorage.Components[0], A(42));
-    }
+    archetype->AddEntity(e1);
+    archetype->AddEntity(e2);
+    archetype->AddEntity(e3);
+    archetype->RemoveEntity(e2);
 
-    TEST_F(ArchetypeTest, RemoveComponentTest)
-    {
-        EntityID e1 = 1;
-        archetype->CreateComponentStorages<Transform, A>();
+    const auto& entities = archetype->GetEntities();
+    ASSERT_EQ(entities.size(), 2);
+    EXPECT_EQ(entities[0], e1);
+    EXPECT_NE(entities[1], e2);
+    EXPECT_EQ(entities[1], e3);
+    archetype->AddEntity(e2);
+    ASSERT_EQ(entities.size(), 3);
+    EXPECT_EQ(entities[2], e2);
+    archetype->RemoveEntity(e1);
+    ASSERT_EQ(entities.size(), 2);
+    EXPECT_NE(entities[0], e1);
+    EXPECT_EQ(entities[0], e2);
 
-        archetype->AddEntity(e1);
-        archetype->AddComponents<Transform, A>(e1, Transform({ 1, 2, 3 }, { 4, 5, 6 }, { 7, 8, 9 }), A(42));
+    EXPECT_FALSE(archetype->HasEntity(e1));
+    EXPECT_TRUE(archetype->HasEntity(e2));
+    EXPECT_TRUE(archetype->HasEntity(e3));
+}
 
-        archetype->RemoveComponent<Transform>(e1);
+TEST_F(ArchetypeTest, CreateAndAddComponentTest)
+{
+    EntityID e1 = 1;
+    archetype->CreateComponentStorages<Transform, A>();
 
-        auto& aStorage = archetype->GetComponentStorage<A>();
-        ASSERT_EQ(aStorage.Components.size(), 1);
-        EXPECT_EQ(aStorage.Components[0], A(42));
-    }
+    archetype->AddEntity(e1);
+    archetype->AddComponents<Transform, A>(e1, Transform({ 1, 2, 3 }, { 4, 5, 6 }, { 7, 8, 9 }), A(42));
 
-    TEST_F(ArchetypeTest, RemoveAllComponentsTest)
-    {
-        EntityID e1 = 1;
-        EntityID e2 = 2;
-        EntityID e3 = 3;
+    auto& transformStorage = archetype->GetComponentStorage<Transform>();
+    auto& aStorage = archetype->GetComponentStorage<A>();
 
-        archetype->CreateComponentStorages<Transform, A, B>();
+    ASSERT_EQ(transformStorage.Components.size(), 1);
+    ASSERT_EQ(aStorage.Components.size(), 1);
 
-        archetype->AddEntity(e1);
-        archetype->AddEntity(e2);
-        archetype->AddEntity(e3);
+    EXPECT_EQ(transformStorage.Components[0], Transform({ 1, 2, 3 }, { 4, 5, 6 }, { 7, 8, 9 }));
+    EXPECT_EQ(aStorage.Components[0], A(42));
+}
 
-        archetype->AddComponents<Transform, A, B>(e1, Transform({ 1, 1, 1 }, { 0, 0, 0 }, { 1, 1, 1 }), A(10), B{ "Entity1" });
-        archetype->AddComponents<Transform, A, B>(e2, Transform({ 2, 2, 2 }, { 0, 0, 0 }, { 1, 1, 1 }), A(20), B{ "Entity2" });
-        archetype->AddComponents<Transform, A, B>(e3, Transform({ 3, 3, 3 }, { 0, 0, 0 }, { 1, 1, 1 }), A(30), B{ "Entity3" });
+TEST_F(ArchetypeTest, RemoveComponentTest)
+{
+    EntityID e1 = 1;
+    archetype->CreateComponentStorages<Transform, A>();
 
-        // Remove components for the second entity (e2)
-        archetype->RemoveComponents<Transform, A, B>(e2);
+    archetype->AddEntity(e1);
+    archetype->AddComponents<Transform, A>(e1, Transform({ 1, 2, 3 }, { 4, 5, 6 }, { 7, 8, 9 }), A(42));
 
-        auto& transformStorage = archetype->GetComponentStorage<Transform>();
-        auto& aStorage = archetype->GetComponentStorage<A>();
-        auto& bStorage = archetype->GetComponentStorage<B>();
+    archetype->RemoveComponent<Transform>(e1);
 
-        ASSERT_EQ(transformStorage.Components.size(), 2);
-        ASSERT_EQ(aStorage.Components.size(), 2);
-        ASSERT_EQ(bStorage.Components.size(), 2);
+    auto& aStorage = archetype->GetComponentStorage<A>();
+    ASSERT_EQ(aStorage.Components.size(), 1);
+    EXPECT_EQ(aStorage.Components[0], A(42));
+}
 
-        EXPECT_EQ(transformStorage.Components[0], Transform({ 1, 1, 1 }, { 0, 0, 0 }, { 1, 1, 1 }));
-        EXPECT_EQ(transformStorage.Components[1], Transform({ 3, 3, 3 }, { 0, 0, 0 }, { 1, 1, 1 }));
+TEST_F(ArchetypeTest, RemoveAllComponentsTest)
+{
+    EntityID e1 = 1;
+    EntityID e2 = 2;
+    EntityID e3 = 3;
 
-        EXPECT_EQ(aStorage.Components[0], A(10));
-        EXPECT_EQ(aStorage.Components[1], A(30));
+    archetype->CreateComponentStorages<Transform, A, B>();
 
-        EXPECT_EQ(bStorage.Components[0], B{ "Entity1" });
-        EXPECT_EQ(bStorage.Components[1], B{ "Entity3" });
-    }
+    archetype->AddEntity(e1);
+    archetype->AddEntity(e2);
+    archetype->AddEntity(e3);
 
-    TEST_F(ArchetypeTest, HandleInvalidEntityRemoval)
-    {
-        EntityID invalidEntity = 999;
+    archetype->AddComponents<Transform, A, B>(e1, Transform({ 1, 1, 1 }, { 0, 0, 0 }, { 1, 1, 1 }), A(10), B{ "Entity1" });
+    archetype->AddComponents<Transform, A, B>(e2, Transform({ 2, 2, 2 }, { 0, 0, 0 }, { 1, 1, 1 }), A(20), B{ "Entity2" });
+    archetype->AddComponents<Transform, A, B>(e3, Transform({ 3, 3, 3 }, { 0, 0, 0 }, { 1, 1, 1 }), A(30), B{ "Entity3" });
 
-        // Ensure no crash occurs when removing a non-existent entity
-        EXPECT_NO_THROW(archetype->RemoveEntity(invalidEntity));
-    }
+    // Remove components for the second entity (e2)
+    archetype->RemoveComponents<Transform, A, B>(e2);
 
-    TEST_F(ArchetypeTest, HandleInvalidComponentRemoval)
-    {
-        EntityID e1 = 1;
-        archetype->CreateComponentStorages<Transform>();
-        archetype->AddEntity(e1);
-        archetype->AddComponents<Transform>(e1, Transform({ 1, 2, 3 }, { 4, 5, 6 }, { 7, 8, 9 }));
+    auto& transformStorage = archetype->GetComponentStorage<Transform>();
+    auto& aStorage = archetype->GetComponentStorage<A>();
+    auto& bStorage = archetype->GetComponentStorage<B>();
 
-        // Ensure no crash occurs when removing a component that doesn't exist
-        EXPECT_NO_THROW(archetype->RemoveComponent<A>(e1));
-    }
+    ASSERT_EQ(transformStorage.Components.size(), 2);
+    ASSERT_EQ(aStorage.Components.size(), 2);
+    ASSERT_EQ(bStorage.Components.size(), 2);
+
+    EXPECT_EQ(transformStorage.Components[0], Transform({ 1, 1, 1 }, { 0, 0, 0 }, { 1, 1, 1 }));
+    EXPECT_EQ(transformStorage.Components[1], Transform({ 3, 3, 3 }, { 0, 0, 0 }, { 1, 1, 1 }));
+
+    EXPECT_EQ(aStorage.Components[0], A(10));
+    EXPECT_EQ(aStorage.Components[1], A(30));
+
+    EXPECT_EQ(bStorage.Components[0], B{ "Entity1" });
+    EXPECT_EQ(bStorage.Components[1], B{ "Entity3" });
+}
+
+TEST_F(ArchetypeTest, HandleInvalidEntityRemoval)
+{
+    EntityID invalidEntity = 999;
+
+    // Ensure no crash occurs when removing a non-existent entity
+    EXPECT_NO_THROW(archetype->RemoveEntity(invalidEntity));
+}
+
+TEST_F(ArchetypeTest, HandleInvalidComponentRemoval)
+{
+    EntityID e1 = 1;
+    archetype->CreateComponentStorages<Transform>();
+    archetype->AddEntity(e1);
+    archetype->AddComponents<Transform>(e1, Transform({ 1, 2, 3 }, { 4, 5, 6 }, { 7, 8, 9 }));
+
+    // Ensure no crash occurs when removing a component that doesn't exist
+    EXPECT_NO_THROW(archetype->RemoveComponent<A>(e1));
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////
 // EntityRegistry Tests ////////////////////////////////////////////////////////////////
@@ -461,7 +464,7 @@ TEST_F(EntityRegistryTest, EntityStressTest)
     ecs::EntityRegistry registry;
     {
         SCOPED_TRACE("Create entities");
-        for (int i = 0; i < 10000; i++)
+        for (int i = 0; i < 8192; i++)
         {
             try
             {
@@ -477,7 +480,7 @@ TEST_F(EntityRegistryTest, EntityStressTest)
             }
             catch (const std::exception& e)
             {
-                SUCCEED() << e.what();
+                FAIL() << e.what();
                 break;
             }
         }
@@ -555,7 +558,7 @@ TEST_F(EntityRegistryTest, EntityStressTest)
     }
     {
         SCOPED_TRACE("Verify Component Values");
-        for (EntityID entity = 0; entity < 4096; entity++)
+        for (EntityID entity = 0; entity < 8192; entity++)
         {
             if (entity >= 100 && entity < 420)
             {
@@ -846,4 +849,65 @@ TEST_F(EntityRegistryTest, ComponentViewTest)
     }
 }
 
+class ComponentViewStressTest : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        ecs::EntityRegistry::RegisterComponentTypes<Transform, A, B>();
+        registry = EntityRegistry(8192);
+        for (int i = 0; i < 8192; i++)
+        {
+            EntityID entity = registry.CreateEntity();
+            Transform transform{{(float)i, (float)i, (float)i * 10}, {0, 0, 0}, {1, 1, 1}};
+            A a{i};
+            B b{"Entity" + std::to_string(i)};
+            registry.TryAddComponent(entity, transform);
+            registry.TryAddComponent(entity, a);
+            registry.TryAddComponent(entity, b);
+        }
+        for (EntityID entity = 100; entity < 420; entity++)
+        {
+            registry.DeleteComponent<Transform>(entity);
+        }
+        for (EntityID entity = 420; entity < 1000; entity++)
+        {
+            registry.DeleteComponent<A>(entity);
+        }
+        for (EntityID entity = 1000; entity < 1400; entity++)
+        {
+            registry.DeleteComponent<B>(entity);
+        }
+        for (EntityID entity = 1400; entity < 1800; entity++)
+        {
+            registry.DeleteComponent<Transform>(entity);
+            registry.DeleteComponent<B>(entity);
+        }
+        for (int i = 696; i < 756; i++)
+        {
+            registry.DeleteEntity(i);    
+        }
+        for (int i = 1800; i < 2120; i++)
+        {
+            registry.DeleteEntity(i);
+        }
+        registry.Flush();
+    }
+
+    EntityRegistry registry;
+};
+
+TEST_F(ComponentViewStressTest, ComponentViewStressTest)
+{
+    auto view = registry.GetView<Transform, A>();
+
+    for (auto index : view)
+    {
+        Transform transform{ {(float)index.Entity, (float)index.Entity, (float)index.Entity * 10}, {0, 0, 0}, {1, 1, 1} };
+        A a{(int)index.Entity};
+        auto[transformInView, aInView] = view.Get(index);
+        EXPECT_EQ(transformInView.Position, transform.Position);
+        EXPECT_EQ(a.Hello, aInView.Hello);
+    }
+}
 }

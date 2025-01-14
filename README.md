@@ -8,8 +8,7 @@ I'm trying to achieve an Archetype based ECS, where entities are grouped by thei
 
 No real performance tests have been done yet since it's a pet project and I don't want to spend too much time on this.
 
-This ECS has some limitations:
-- Has a fixed number of entities tu be assigned when you create the registry. This will probably evolve to be dynamic in the future.
+This ECS has a limitation:
 - It has a fixed number of components per entity. The limit is 64 and I don't plan on changing it because it would either require for me to use sets OR dynamic bitsets. On one hand, it will be slower and on the other hand, I'd have to handle when the bitset grows further than what we want. Either way, we should know the number of components we want to use in advance.
 
 ## How to use

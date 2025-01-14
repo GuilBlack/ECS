@@ -249,7 +249,12 @@ namespace ecs
                 {
                     std::move(m_Buffer + m_Head, m_Buffer + m_Tail, newBuffer);
                 }
-                else
+                else if (m_Head > m_Tail)
+                {
+                    auto newBufferMid = std::move(m_Buffer + m_Head, m_Buffer + m_Capacity, newBuffer);
+                    std::move(m_Buffer, m_Buffer + (m_Count - (m_Capacity - m_Head)), newBufferMid);
+                }
+                else if (m_Count == m_Capacity)
                 {
                     auto newBufferMid = std::move(m_Buffer + m_Head, m_Buffer + m_Capacity, newBuffer);
                     std::move(m_Buffer, m_Buffer + (m_Count - (m_Capacity - m_Head)), newBufferMid);
@@ -261,7 +266,12 @@ namespace ecs
                 {
                     std::copy(m_Buffer + m_Head, m_Buffer + m_Tail, newBuffer);
                 }
-                else
+                else if (m_Head > m_Tail)
+                {
+                    auto newBufferMid = std::copy(m_Buffer + m_Head, m_Buffer + m_Capacity, newBuffer);
+                    std::copy(m_Buffer, m_Buffer + (m_Count - (m_Capacity - m_Head)), newBufferMid);
+                }
+                else if (m_Count == m_Capacity)
                 {
                     auto newBufferMid = std::copy(m_Buffer + m_Head, m_Buffer + m_Capacity, newBuffer);
                     std::copy(m_Buffer, m_Buffer + (m_Count - (m_Capacity - m_Head)), newBufferMid);
