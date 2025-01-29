@@ -9,6 +9,8 @@
 #include <cassert>
 #include <string>
 #include "include/ecs.h"
+#include <chrono>
+#include <iostream>
 
 struct vec3
 {
@@ -138,4 +140,20 @@ struct ComplexStruct
         }
         return *this;
     }
+};
+
+class ScopeTimer {
+public:
+    ScopeTimer(const std::string& name)
+        : name_(name), start_(std::chrono::high_resolution_clock::now()) {}
+
+    ~ScopeTimer() {
+        auto end = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration<double, std::milli>(end - start_).count();
+        std::cout << "[TIMER] " << name_ << " took " << duration << " ms\n";
+    }
+
+private:
+    std::string name_;
+    std::chrono::high_resolution_clock::time_point start_;
 };

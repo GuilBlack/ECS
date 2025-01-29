@@ -558,6 +558,7 @@ TEST_F(EntityRegistryTest, EntityStressTest)
     }
     {
         SCOPED_TRACE("Verify Component Values");
+        ScopeTimer timer("Verify Component Values");
         for (EntityID entity = 0; entity < 8192; entity++)
         {
             if (entity >= 100 && entity < 420)
@@ -899,12 +900,14 @@ protected:
 
 TEST_F(ComponentViewStressTest, ComponentViewStressTest)
 {
+    ScopeTimer timer("ComponentViewStressTest");
     auto view = registry.GetView<Transform, A>();
-
+    Transform transform{};
+    A a{};
     for (auto index : view)
     {
-        Transform transform{ {(float)index.Entity, (float)index.Entity, (float)index.Entity * 10}, {0, 0, 0}, {1, 1, 1} };
-        A a{(int)index.Entity};
+        transform = { {(float)index.Entity, (float)index.Entity, (float)index.Entity * 10}, {0, 0, 0}, {1, 1, 1} };
+        a = {(int)index.Entity};
         auto[transformInView, aInView] = view.Get(index);
         EXPECT_EQ(transformInView.Position, transform.Position);
         EXPECT_EQ(a.Hello, aInView.Hello);
